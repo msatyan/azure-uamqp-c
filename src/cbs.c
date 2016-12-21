@@ -66,6 +66,7 @@ static int set_pending_operation_properties(MESSAGE_HANDLE message)
     }
     else
     {
+		AMQP_VALUE message_id;
         AMQP_VALUE reply_to = amqpvalue_create_address_string("cbs");
         if (reply_to == NULL)
         {
@@ -81,7 +82,7 @@ static int set_pending_operation_properties(MESSAGE_HANDLE message)
             amqpvalue_destroy(reply_to);
         }
 
-        AMQP_VALUE message_id = amqpvalue_create_message_id_ulong(0x43);
+        message_id = amqpvalue_create_message_id_ulong(0x43);
         if (message_id == NULL)
         {
             result = __LINE__;

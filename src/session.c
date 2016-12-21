@@ -6,6 +6,7 @@
 #include <crtdbg.h>
 #endif
 #include <string.h>
+#include <stdint.h>
 #include "azure_uamqp_c/session.h"
 #include "azure_uamqp_c/connection.h"
 #include "azure_uamqp_c/amqpalloc.h"
@@ -477,9 +478,11 @@ static void on_frame_received(void* context, AMQP_VALUE performative, uint32_t p
 			}
 			else
 			{
+				LINK_ENDPOINT_INSTANCE* link_endpoint;
+
 				detach_destroy(detach_handle);
 
-				LINK_ENDPOINT_INSTANCE* link_endpoint = find_link_endpoint_by_input_handle(session_instance, remote_handle);
+				link_endpoint = find_link_endpoint_by_input_handle(session_instance, remote_handle);
 				if (link_endpoint == NULL)
 				{
 					end_session_with_error(session_instance, "amqp:session:unattached-handle", "");
@@ -525,6 +528,7 @@ static void on_frame_received(void* context, AMQP_VALUE performative, uint32_t p
 			else
 			{
 				LINK_ENDPOINT_INSTANCE* link_endpoint_instance = NULL;
+				size_t i;
 
 				session_instance->remote_incoming_window = flow_next_incoming_id + flow_incoming_window - session_instance->next_outgoing_id;
 
@@ -540,7 +544,7 @@ static void on_frame_received(void* context, AMQP_VALUE performative, uint32_t p
 					link_endpoint_instance->frame_received_callback(link_endpoint_instance->callback_context, performative, payload_size, payload_bytes);
 				}
 
-				size_t i = 0;
+				i = 0;
 				while ((session_instance->remote_incoming_window > 0) && (i < session_instance->link_endpoint_count))
 				{
 					/* notify the caller that it can send here */
@@ -575,13 +579,15 @@ static void on_frame_received(void* context, AMQP_VALUE performative, uint32_t p
 			}
 			else
 			{
+				LINK_ENDPOINT_INSTANCE* link_endpoint;
+
 				transfer_destroy(transfer_handle);
 
 				session_instance->next_incoming_id++;
 				session_instance->remote_outgoing_window--;
 				session_instance->incoming_window--;
 
-				LINK_ENDPOINT_INSTANCE* link_endpoint = find_link_endpoint_by_input_handle(session_instance, remote_handle);
+				link_endpoint = find_link_endpoint_by_input_handle(session_instance, remote_handle);
 				if (link_endpoint == NULL)
 				{
 					end_session_with_error(session_instance, "amqp:session:unattached-handle", "");
@@ -1469,6 +1475,7 @@ SESSION_SEND_TRANSFER_RESULT session_send_transfer(LINK_ENDPOINT_HANDLE link_end
                                         uint32_t temp_current_payload_pos = current_payload_pos;
                                         AMQP_VALUE multi_transfer_amqp_value;
                                         bool more;
+										PAYLOAD* transfer_frame_payloads;
 
                                         if (current_transfer_frame_payload_size > available_frame_size)
                                         {
@@ -1513,7 +1520,7 @@ SESSION_SEND_TRANSFER_RESULT session_send_transfer(LINK_ENDPOINT_HANDLE link_end
                                         }
 
                                         transfer_frame_payload_count = (uint32_t)(temp_current_payload_index - current_payload_index + 1);
-                                        PAYLOAD* transfer_frame_payloads = (PAYLOAD*)amqpalloc_malloc(transfer_frame_payload_count * sizeof(PAYLOAD));
+                                        transfer_frame_payloads = (PAYLOAD*)amqpalloc_malloc(transfer_frame_payload_count * sizeof(PAYLOAD));
                                         if (transfer_frame_payloads == NULL)
                                         {
                                             amqpvalue_destroy(multi_transfer_amqp_value);

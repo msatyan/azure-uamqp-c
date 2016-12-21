@@ -1128,10 +1128,8 @@ int amqpvalue_set_list_item_count(AMQP_VALUE value, uint32_t list_size)
 				}
 				else
 				{
-					value_data->value.list_value.items = new_list;
-
-					/* Codes_SRS_AMQPVALUE_01_162: [When a list is grown a null AMQP_VALUE shall be inserted as new list items to fill the list up to the new size.] */
 					uint32_t i;
+					value_data->value.list_value.items = new_list;
 
 					/* Codes_SRS_AMQPVALUE_01_162: [When a list is grown a null AMQP_VALUE shall be inserted as new list items to fill the list up to the new size.] */
 					for (i = value_data->value.list_value.count; i < list_size; i++)
@@ -3233,10 +3231,10 @@ int amqpvalue_encode(AMQP_VALUE value, AMQPVALUE_ENCODER_OUTPUT encoder_output, 
 
 static int count_bytes(void* context, const unsigned char* bytes, size_t length)
 {
+    size_t* byte_count = (size_t*)context;
 	(void)bytes;
 
-    size_t* byte_count = (size_t*)context;
-    *byte_count += length;
+	*byte_count += length;
 
     return 0;
 }
@@ -3371,9 +3369,9 @@ static void inner_decoder_callback(void* context, AMQP_VALUE decoded_value)
 {
     /* API issue: the decoded_value should be removed completely:
     Filed: uAMQP: inner_decoder_callback in amqpvalue.c could probably do without the decoded_value ... */
-    (void)decoded_value;
 	INTERNAL_DECODER_DATA* internal_decoder_data = (INTERNAL_DECODER_DATA*)context;
 	INTERNAL_DECODER_DATA* inner_decoder = (INTERNAL_DECODER_DATA*)internal_decoder_data->inner_decoder;
+    (void)decoded_value;
 	inner_decoder->decoder_state = DECODER_STATE_DONE;
 }
 
@@ -3411,8 +3409,10 @@ int internal_decoder_decode_bytes(INTERNAL_DECODER_DATA* internal_decoder_data, 
 					result = __LINE__;
 					break;
 				case 0x00: /* descriptor */
+				{
+					AMQP_VALUE_DATA* descriptor;
 					internal_decoder_data->decode_to_value->type = AMQP_TYPE_DESCRIBED;
-					AMQP_VALUE_DATA* descriptor = (AMQP_VALUE_DATA*)amqpalloc_malloc(sizeof(AMQP_VALUE_DATA));
+					descriptor = (AMQP_VALUE_DATA*)amqpalloc_malloc(sizeof(AMQP_VALUE_DATA));
 					if (descriptor == NULL)
 					{
 						internal_decoder_data->decoder_state = DECODER_STATE_ERROR;
@@ -3437,6 +3437,7 @@ int internal_decoder_decode_bytes(INTERNAL_DECODER_DATA* internal_decoder_data, 
 					}
 
 					break;
+				}
 
 				/* Codes_SRS_AMQPVALUE_01_329: [<encoding code="0x40" category="fixed" width="0" label="the null value"/>] */
 				case 0x40:
@@ -3828,9 +3829,10 @@ int internal_decoder_decode_bytes(INTERNAL_DECODER_DATA* internal_decoder_data, 
 
 							if (inner_decoder->decoder_state == DECODER_STATE_DONE)
 							{
+								AMQP_VALUE_DATA* described_value;
 								internal_decoder_destroy(inner_decoder);
 
-								AMQP_VALUE_DATA* described_value = (AMQP_VALUE_DATA*)amqpalloc_malloc(sizeof(AMQP_VALUE_DATA));
+								described_value = (AMQP_VALUE_DATA*)amqpalloc_malloc(sizeof(AMQP_VALUE_DATA));
 								if (described_value == NULL)
 								{
 									internal_decoder_data->decoder_state = DECODER_STATE_ERROR;
@@ -5136,9 +5138,10 @@ int internal_decoder_decode_bytes(INTERNAL_DECODER_DATA* internal_decoder_data, 
 
 						if (internal_decoder_data->bytes_decoded == 0)
 						{
+							AMQP_VALUE_DATA* array_item;
 							internal_decoder_data->decode_value_state.array_value_state.constructor_byte = buffer[0];
 
-							AMQP_VALUE_DATA* array_item = (AMQP_VALUE_DATA*)amqpalloc_malloc(sizeof(AMQP_VALUE_DATA));
+							array_item = (AMQP_VALUE_DATA*)amqpalloc_malloc(sizeof(AMQP_VALUE_DATA));
 							if (array_item == NULL)
 							{
 								internal_decoder_data->decoder_state = DECODER_STATE_ERROR;

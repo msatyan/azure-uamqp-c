@@ -1,4 +1,4 @@
-// Copyright (c) Microsoft. All rights reserved.
+﻿// Copyright (c) Microsoft. All rights reserved.
 // Licensed under the MIT license. See LICENSE file in the project root for full license information.
 
 #include <stdlib.h>
@@ -190,9 +190,10 @@ static void log_incoming_frame(AMQP_VALUE performative)
     AMQP_VALUE descriptor = amqpvalue_get_inplace_descriptor(performative);
     if (descriptor != NULL)
     {
+		char* performative_as_string;
         LOG(LOG_TRACE, 0, "<- ");
         LOG(LOG_TRACE, 0, (char*)get_frame_type_as_string(descriptor));
-        char* performative_as_string = NULL;
+        performative_as_string = NULL;
         LOG(LOG_TRACE, LOG_LINE, (performative_as_string = amqpvalue_to_string(performative)));
         if (performative_as_string != NULL)
         {
@@ -210,9 +211,10 @@ static void log_outgoing_frame(AMQP_VALUE performative)
     AMQP_VALUE descriptor = amqpvalue_get_inplace_descriptor(performative);
     if (descriptor != NULL)
     {
+		char* performative_as_string;
         LOG(LOG_TRACE, 0, "-> ");
         LOG(LOG_TRACE, 0, (char*)get_frame_type_as_string(descriptor));
-        char* performative_as_string = NULL;
+        performative_as_string = NULL;
         LOG(LOG_TRACE, LOG_LINE, (performative_as_string = amqpvalue_to_string(performative)));
         if (performative_as_string != NULL)
         {
@@ -633,10 +635,11 @@ static void connection_on_io_error(void* context)
 
 static void on_empty_amqp_frame_received(void* context, uint16_t channel)
 {
-    (void)channel;
     /* It does not matter on which channel we received the frame */
     CONNECTION_INSTANCE* connection_instance = (CONNECTION_INSTANCE*)context;
-    if (connection_instance->is_trace_on == 1)
+    (void)channel;
+
+	if (connection_instance->is_trace_on == 1)
     {
         LOG(LOG_TRACE, LOG_LINE, "<- Empty frame");
     }
@@ -648,8 +651,8 @@ static void on_empty_amqp_frame_received(void* context, uint16_t channel)
 
 static void on_amqp_frame_received(void* context, uint16_t channel, AMQP_VALUE performative, const unsigned char* payload_bytes, uint32_t payload_size)
 {
-    (void)channel;
     CONNECTION_INSTANCE* connection_instance = (CONNECTION_INSTANCE*)context;
+    (void)channel;
 
     if (tickcounter_get_current_ms(connection_instance->tick_counter, &connection_instance->last_frame_received_time) != 0)
     {
@@ -1568,9 +1571,11 @@ void connection_destroy_endpoint(ENDPOINT_HANDLE endpoint)
         /* Codes_SRS_CONNECTION_01_131: [Any incoming channel number associated with the endpoint shall be released.] */
 		if (i < connection->endpoint_count && i > 0)
 		{
+			ENDPOINT_INSTANCE** new_endpoints;
+
 			(void)memmove(connection->endpoints + i, connection->endpoints + i + 1, sizeof(ENDPOINT_INSTANCE*) * (connection->endpoint_count - i - 1));
 
-			ENDPOINT_INSTANCE** new_endpoints = (ENDPOINT_INSTANCE**)amqpalloc_realloc(connection->endpoints, (connection->endpoint_count - 1) * sizeof(ENDPOINT_INSTANCE*));
+			new_endpoints = (ENDPOINT_INSTANCE**)amqpalloc_realloc(connection->endpoints, (connection->endpoint_count - 1) * sizeof(ENDPOINT_INSTANCE*));
 			if (new_endpoints != NULL)
 			{
 				connection->endpoints = new_endpoints;

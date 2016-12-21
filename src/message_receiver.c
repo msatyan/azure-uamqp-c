@@ -172,8 +172,9 @@ static AMQP_VALUE on_transfer_received(void* context, TRANSFER_HANDLE transfer, 
 		}
 		else
 		{
+			AMQPVALUE_DECODER_HANDLE amqpvalue_decoder;
 			message_receiver_instance->decoded_message;
-			AMQPVALUE_DECODER_HANDLE amqpvalue_decoder = amqpvalue_decoder_create(decode_message_value_callback, message_receiver_instance);
+			amqpvalue_decoder = amqpvalue_decoder_create(decode_message_value_callback, message_receiver_instance);
 			if (amqpvalue_decoder == NULL)
 			{
 				set_message_receiver_state(message_receiver_instance, MESSAGE_RECEIVER_STATE_ERROR);

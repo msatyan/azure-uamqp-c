@@ -1,4 +1,4 @@
-// Copyright (c) Microsoft. All rights reserved.
+﻿// Copyright (c) Microsoft. All rights reserved.
 // Licensed under the MIT license. See LICENSE file in the project root for full license information.
 
 #include <stdlib.h>
@@ -589,6 +589,9 @@ int frame_codec_encode_frame(FRAME_CODEC_HANDLE frame_codec, uint8_t type, const
             /* Codes_SRS_FRAME_CODEC_01_064: [The frame is malformed if the size is less than the size of the frame header (8 bytes).] */
             unsigned char frame_header[6];
 
+            /* Codes_SRS_FRAME_CODEC_01_090: [If the type_specific_size – 2 does not divide by 4, frame_codec_encode_frame shall pad the type_specific bytes with zeroes so that type specific data is according to the AMQP ISO.] */
+			unsigned char padding_bytes[] = { 0x00, 0x00, 0x00 };
+
             frame_header[0] = (frame_size >> 24) & 0xFF;
             frame_header[1] = (frame_size >> 16) & 0xFF;
             frame_header[2] = (frame_size >> 8) & 0xFF;
@@ -608,8 +611,6 @@ int frame_codec_encode_frame(FRAME_CODEC_HANDLE frame_codec, uint8_t type, const
             }
 
             /* send padding bytes */
-            /* Codes_SRS_FRAME_CODEC_01_090: [If the type_specific_size – 2 does not divide by 4, frame_codec_encode_frame shall pad the type_specific bytes with zeroes so that type specific data is according to the AMQP ISO.] */
-            unsigned char padding_bytes[] = { 0x00, 0x00, 0x00 };
 
             /* Codes_SRS_FRAME_CODEC_01_088: [Encoded bytes shall be passed to the on_bytes_encoded callback.] */
             if (padding_byte_count > 0)

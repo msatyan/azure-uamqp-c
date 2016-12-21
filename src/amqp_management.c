@@ -156,6 +156,7 @@ static AMQP_VALUE on_message_received(const void* context, MESSAGE_HANDLE messag
                                 else
                                 {
                                     const char* status_description = NULL;
+									size_t i;
 
                                     desc_value = amqpvalue_get_map_value(map, desc_key);
                                     if (desc_value != NULL)
@@ -163,7 +164,7 @@ static AMQP_VALUE on_message_received(const void* context, MESSAGE_HANDLE messag
                                         amqpvalue_get_string(desc_value, &status_description);
                                     }
 
-                                    size_t i = 0;
+                                    i = 0;
                                     while (i < amqp_management_instance->operation_message_count)
                                     {
                                         if (amqp_management_instance->operation_messages[i]->operation_state == OPERATION_STATE_AWAIT_REPLY)
@@ -404,6 +405,8 @@ AMQP_MANAGEMENT_HANDLE amqpmanagement_create(SESSION_HANDLE session, const char*
         result = (AMQP_MANAGEMENT_INSTANCE*)amqpalloc_malloc(sizeof(AMQP_MANAGEMENT_INSTANCE));
         if (result != NULL)
         {
+			AMQP_VALUE source;
+			
             result->session = session;
             result->sender_connected = 0;
             result->receiver_connected = 0;
@@ -412,7 +415,7 @@ AMQP_MANAGEMENT_HANDLE amqpmanagement_create(SESSION_HANDLE session, const char*
             result->on_amqp_management_state_changed = on_amqp_management_state_changed;
             result->callback_context = callback_context;
 
-            AMQP_VALUE source = messaging_create_source(management_node);
+            source = messaging_create_source(management_node);
             if (source == NULL)
             {
                 amqpalloc_free(result);
@@ -438,11 +441,12 @@ AMQP_MANAGEMENT_HANDLE amqpmanagement_create(SESSION_HANDLE session, const char*
                     else
                     {
                         static const char* receiver_suffix = "-receiver";
+						char* receiver_link_name;
 
                         (void)strcpy(sender_link_name, management_node);
                         (void)strcat(sender_link_name, sender_suffix);
 
-                        char* receiver_link_name = (char*)amqpalloc_malloc(strlen(management_node) + strlen(receiver_suffix) + 1);
+                        receiver_link_name = (char*)amqpalloc_malloc(strlen(management_node) + strlen(receiver_suffix) + 1);
                         if (receiver_link_name == NULL)
                         {
                             result = NULL;
@@ -645,6 +649,8 @@ int amqpmanagement_start_operation(AMQP_MANAGEMENT_HANDLE amqp_management, const
                     }
                     else
                     {
+						OPERATION_MESSAGE_INSTANCE** new_operation_messages;
+
                         pending_operation_message->message = message_clone(message);
                         pending_operation_message->callback_context = context;
                         pending_operation_message->on_operation_complete = on_operation_complete;
@@ -653,7 +659,7 @@ int amqpmanagement_start_operation(AMQP_MANAGEMENT_HANDLE amqp_management, const
 
                         amqp_management->next_message_id++;
 
-                        OPERATION_MESSAGE_INSTANCE** new_operation_messages = amqpalloc_realloc(amqp_management->operation_messages, (amqp_management->operation_message_count + 1) * sizeof(OPERATION_MESSAGE_INSTANCE*));
+                        new_operation_messages = amqpalloc_realloc(amqp_management->operation_messages, (amqp_management->operation_message_count + 1) * sizeof(OPERATION_MESSAGE_INSTANCE*));
                         if (new_operation_messages == NULL)
                         {
                             message_destroy(message);
