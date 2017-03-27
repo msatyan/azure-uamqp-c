@@ -15,7 +15,7 @@
 #include "windows.h"
 #endif
 
-static const size_t msg_count = 1000;
+static const size_t msg_count = 10000;
 static unsigned int sent_messages = 0;
 
 static void on_message_send_complete(void* context, MESSAGE_SEND_RESULT send_result)

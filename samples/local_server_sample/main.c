@@ -33,7 +33,7 @@ static AMQP_VALUE on_message_received(const void* context, MESSAGE_HANDLE messag
 	(void)context;
 	(void)message;
 
-	printf("Message received.\r\n");
+//	printf("Message received.\r\n");
 
 	return messaging_delivery_accepted();
 }
