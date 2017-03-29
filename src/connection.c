@@ -558,13 +558,33 @@ static int connection_byte_received(CONNECTION_INSTANCE* connection_instance, un
 static void connection_on_bytes_received(void* context, const unsigned char* buffer, size_t size)
 {
     size_t i;
+    CONNECTION_HANDLE connection = (CONNECTION_HANDLE)context;
 
-    for (i = 0; i < size; i++)
+    switch (connection->connection_state)
     {
-        if (connection_byte_received((CONNECTION_INSTANCE*)context, buffer[i]) != 0)
+    default:
+    case CONNECTION_STATE_START:
+    case CONNECTION_STATE_HDR_SENT:
+        for (i = 0; i < size; i++)
         {
-            break;
+            if (connection_byte_received((CONNECTION_INSTANCE*)context, buffer[i]) != 0)
+            {
+                break;
+            }
         }
+        break;
+    case CONNECTION_STATE_HDR_RCVD:
+    case CONNECTION_STATE_HDR_EXCH:
+    case CONNECTION_STATE_OPEN_RCVD:
+    case CONNECTION_STATE_OPEN_SENT:
+    case CONNECTION_STATE_OPENED:
+        if (frame_codec_receive_bytes(connection->frame_codec, buffer, size) != 0)
+        {
+            /* Codes_SRS_CONNECTION_01_218: [The error amqp:internal-error shall be set in the error.condition field of the CLOSE frame.] */
+            /* Codes_SRS_CONNECTION_01_219: [The error description shall be set to an implementation defined string.] */
+            close_connection_with_error(connection, "amqp:internal-error", "connection_byte_received::frame_codec_receive_bytes failed");
+        }
+        break;
     }
 }
 

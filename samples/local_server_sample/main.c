@@ -22,6 +22,7 @@ static CONNECTION_HANDLE connection;
 static SESSION_HANDLE session;
 static LINK_HANDLE link;
 static MESSAGE_RECEIVER_HANDLE message_receiver;
+static size_t count_received;
 
 static void on_message_receiver_state_changed(const void* context, MESSAGE_RECEIVER_STATE new_state, MESSAGE_RECEIVER_STATE previous_state)
 {
@@ -33,7 +34,11 @@ static AMQP_VALUE on_message_received(const void* context, MESSAGE_HANDLE messag
 	(void)context;
 	(void)message;
 
-//	printf("Message received.\r\n");
+    if ((count_received % 1000) == 0)
+    {
+        printf("Messages received : %u.\r\n", (unsigned int)count_received);
+    }
+    count_received++;
 
 	return messaging_delivery_accepted();
 }
@@ -57,11 +62,15 @@ static bool on_new_session_endpoint(void* context, ENDPOINT_HANDLE new_endpoint)
 	return true;
 }
 
-static void on_socket_accepted(void* context, XIO_HANDLE io)
+static void on_socket_accepted(void* context, const IO_INTERFACE_DESCRIPTION* interface_description, void* io_parameters)
 {
 	HEADERDETECTIO_CONFIG header_detect_io_config;
+    XIO_HANDLE underlying_io;
+
     (void)context;
-    header_detect_io_config.underlying_io = io;
+
+    underlying_io = xio_create(interface_description, io_parameters);
+    header_detect_io_config.underlying_io = underlying_io;
 	XIO_HANDLE header_detect_io = xio_create(headerdetectio_get_interface_description(), &header_detect_io_config);
 	connection = connection_create(header_detect_io, NULL, "1", on_new_session_endpoint, NULL);
 	connection_listen(connection);

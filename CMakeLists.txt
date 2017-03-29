@@ -170,6 +170,7 @@ set(uamqp_h_files
     ./inc/azure_uamqp_c/sasl_mssbcbs.h
     ./inc/azure_uamqp_c/sasl_plain.h
     ./inc/azure_uamqp_c/saslclientio.h
+    ./inc/azure_uamqp_c/tls_server_io.h
     ./inc/azure_uamqp_c/session.h
     ./inc/azure_uamqp_c/socket_listener.h
 )
@@ -201,6 +202,7 @@ set(uamqp_c_files
 if(WIN32)
     set(socketlistener_c_files
         ./src/socket_listener_win32.c
+        ./src/tls_server_io_schannel.c
     )
 elseif(LINUX)
     set(socketlistener_c_files

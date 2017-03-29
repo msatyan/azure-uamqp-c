@@ -7,6 +7,7 @@
 #include "azure_c_shared_utility/gballoc.h"
 #include "azure_c_shared_utility/platform.h"
 #include "azure_c_shared_utility/socketio.h"
+#include "azure_c_shared_utility/tlsio.h"
 #include "azure_uamqp_c/message_sender.h"
 #include "azure_uamqp_c/message.h"
 #include "azure_uamqp_c/messaging.h"
@@ -15,7 +16,7 @@
 #include "windows.h"
 #endif
 
-static const size_t msg_count = 10000;
+static const size_t msg_count = 100000;
 static unsigned int sent_messages = 0;
 
 static void on_message_send_complete(void* context, MESSAGE_SEND_RESULT send_result)
@@ -51,8 +52,8 @@ int main(int argc, char** argv)
 		/* create socket IO */
 		XIO_HANDLE socket_io;
 
-		SOCKETIO_CONFIG socketio_config = { "localhost", 5672, NULL };
-		socket_io = xio_create(socketio_get_interface_description(), &socketio_config);
+		TLSIO_CONFIG tlsio_config = { "localhost", 5671, NULL };
+		socket_io = xio_create(platform_get_default_tlsio(), &tlsio_config);
 
 		/* create the connection, session and link */
 		connection = connection_create(socket_io, "localhost", "some", NULL, NULL);
