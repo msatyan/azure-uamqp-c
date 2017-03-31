@@ -7,6 +7,7 @@
 #include <string.h>
 #include "azure_c_shared_utility/optimize_size.h"
 #include "azure_c_shared_utility/gballoc.h"
+#include "azure_c_shared_utility/singlylinkedlist.h"
 #include "azure_uamqp_c/amqp_management.h"
 #include "azure_uamqp_c/link.h"
 #include "azure_uamqp_c/message_sender.h"
@@ -45,6 +46,7 @@ typedef struct AMQP_MANAGEMENT_INSTANCE_TAG
     MESSAGE_SENDER_HANDLE message_sender;
     MESSAGE_RECEIVER_HANDLE message_receiver;
     OPERATION_MESSAGE_INSTANCE** operation_messages;
+    SINGLYLINKEDLIST_HANDLE pending_operations;
     size_t operation_message_count;
     unsigned long next_message_id;
     ON_AMQP_MANAGEMENT_OPEN_COMPLETE on_amqp_management_open_complete;
@@ -479,12 +481,16 @@ AMQP_MANAGEMENT_HANDLE amqp_management_create(SESSION_HANDLE session, const char
 {
     AMQP_MANAGEMENT_INSTANCE* result;
 
-    if (session == NULL)
+    if ((session == NULL) ||
+        (management_node == NULL))
     {
+        /* Codes_SRS_AMQP_MANAGEMENT_01_002: [ If `session` or `management_node` is NULL then `amqp_management_create` shall fail and return NULL. ]*/
+        LogError("Bad arguments: session = %p, management_node = %p");
         result = NULL;
     }
     else
     {
+        /* Codes_SRS_AMQP_MANAGEMENT_01_001: [ `amqp_management_create` shall create a new CBS instance and on success return a non-NULL handle to it. ]*/
         result = (AMQP_MANAGEMENT_INSTANCE*)malloc(sizeof(AMQP_MANAGEMENT_INSTANCE));
         if (result != NULL)
         {
@@ -499,75 +505,81 @@ AMQP_MANAGEMENT_HANDLE amqp_management_create(SESSION_HANDLE session, const char
             result->on_amqp_management_error_context = NULL;
             result->amqp_management_state = AMQP_MANAGEMENT_STATE_IDLE;
 
-            AMQP_VALUE source = messaging_create_source(management_node);
-            if (source == NULL)
+            /* Codes_SRS_AMQP_MANAGEMENT_01_003: [ `amqp_management_create` shall create a singly linked list for pending operations by calling `singlylinkedlist_create`. ]*/
+            result->pending_operations = singlylinkedlist_create();
+            if (result->pending_operations == NULL)
             {
+                LogError("Cannot create pending operations list");
                 free(result);
                 result = NULL;
             }
             else
             {
-                AMQP_VALUE target = messaging_create_target(management_node);
-                if (target == NULL)
+                /* Codes_SRS_AMQP_MANAGEMENT_01_010: [ The `source` argument shall be a value created by calling `messaging_create_source` with `management_node` as argument. ]*/
+                AMQP_VALUE source = messaging_create_source(management_node);
+                if (source == NULL)
                 {
+                    singlylinkedlist_destroy(result->pending_operations);
                     free(result);
                     result = NULL;
                 }
                 else
                 {
-                    static const char* sender_suffix = "-sender";
-
-                    char* sender_link_name = (char*)malloc(strlen(management_node) + strlen(sender_suffix) + 1);
-                    if (sender_link_name == NULL)
+                    /* Codes_SRS_AMQP_MANAGEMENT_01_011: [ The `target` argument shall be a value created by calling `messaging_create_target` with `management_node` as argument. ]*/
+                    AMQP_VALUE target = messaging_create_target(management_node);
+                    if (target == NULL)
                     {
+                        singlylinkedlist_destroy(result->pending_operations);
+                        free(result);
                         result = NULL;
                     }
                     else
                     {
-                        static const char* receiver_suffix = "-receiver";
+                        static const char* sender_suffix = "-sender";
 
-                        (void)strcpy(sender_link_name, management_node);
-                        (void)strcat(sender_link_name, sender_suffix);
-
-                        char* receiver_link_name = (char*)malloc(strlen(management_node) + strlen(receiver_suffix) + 1);
-                        if (receiver_link_name == NULL)
+                        char* sender_link_name = (char*)malloc(strlen(management_node) + strlen(sender_suffix) + 1);
+                        if (sender_link_name == NULL)
                         {
                             result = NULL;
                         }
                         else
                         {
-                            (void)strcpy(receiver_link_name, management_node);
-                            (void)strcat(receiver_link_name, receiver_suffix);
+                            static const char* receiver_suffix = "-receiver";
 
-                            result->sender_link = link_create(session, "cbs-sender", role_sender, source, target);
-                            if (result->sender_link == NULL)
+                            (void)strcpy(sender_link_name, management_node);
+                            (void)strcat(sender_link_name, sender_suffix);
+
+                            char* receiver_link_name = (char*)malloc(strlen(management_node) + strlen(receiver_suffix) + 1);
+                            if (receiver_link_name == NULL)
                             {
-                                free(result);
                                 result = NULL;
                             }
                             else
                             {
-                                result->receiver_link = link_create(session, "cbs-receiver", role_receiver, source, target);
-                                if (result->receiver_link == NULL)
+                                (void)strcpy(receiver_link_name, management_node);
+                                (void)strcat(receiver_link_name, receiver_suffix);
+
+                                /* Codes_SRS_AMQP_MANAGEMENT_01_006: [ `amqp_management_create` shall create a sender link by calling `link_create`. ]*/
+                                result->sender_link = link_create(session, "cbs-sender", role_sender, source, target);
+                                if (result->sender_link == NULL)
                                 {
-                                    link_destroy(result->sender_link);
                                     free(result);
                                     result = NULL;
                                 }
                                 else
                                 {
-                                    if ((link_set_max_message_size(result->sender_link, 65535) != 0) ||
-                                        (link_set_max_message_size(result->receiver_link, 65535) != 0))
+                                    /* Codes_SRS_AMQP_MANAGEMENT_01_015: [ `amqp_management_create` shall create a receiver link by calling `link_create`. ]*/
+                                    result->receiver_link = link_create(session, "cbs-receiver", role_receiver, source, target);
+                                    if (result->receiver_link == NULL)
                                     {
                                         link_destroy(result->sender_link);
-                                        link_destroy(result->receiver_link);
                                         free(result);
                                         result = NULL;
                                     }
                                     else
                                     {
-                                        result->message_sender = messagesender_create(result->sender_link, on_message_sender_state_changed, result);
-                                        if (result->message_sender == NULL)
+                                        if ((link_set_max_message_size(result->sender_link, 65535) != 0) ||
+                                            (link_set_max_message_size(result->receiver_link, 65535) != 0))
                                         {
                                             link_destroy(result->sender_link);
                                             link_destroy(result->receiver_link);
@@ -576,10 +588,10 @@ AMQP_MANAGEMENT_HANDLE amqp_management_create(SESSION_HANDLE session, const char
                                         }
                                         else
                                         {
-                                            result->message_receiver = messagereceiver_create(result->receiver_link, on_message_receiver_state_changed, result);
-                                            if (result->message_receiver == NULL)
+                                            /* Codes_SRS_AMQP_MANAGEMENT_01_022: [ `amqp_management_create` shall create a message sender by calling `messagesender_create` and passing to it the sender link handle. ]*/
+                                            result->message_sender = messagesender_create(result->sender_link, on_message_sender_state_changed, result);
+                                            if (result->message_sender == NULL)
                                             {
-                                                messagesender_destroy(result->message_sender);
                                                 link_destroy(result->sender_link);
                                                 link_destroy(result->receiver_link);
                                                 free(result);
@@ -587,23 +599,35 @@ AMQP_MANAGEMENT_HANDLE amqp_management_create(SESSION_HANDLE session, const char
                                             }
                                             else
                                             {
-                                                result->next_message_id = 0;
+                                                result->message_receiver = messagereceiver_create(result->receiver_link, on_message_receiver_state_changed, result);
+                                                if (result->message_receiver == NULL)
+                                                {
+                                                    messagesender_destroy(result->message_sender);
+                                                    link_destroy(result->sender_link);
+                                                    link_destroy(result->receiver_link);
+                                                    free(result);
+                                                    result = NULL;
+                                                }
+                                                else
+                                                {
+                                                    result->next_message_id = 0;
+                                                }
                                             }
                                         }
                                     }
                                 }
+
+                                free(receiver_link_name);
                             }
 
-                            free(receiver_link_name);
+                            free(sender_link_name);
                         }
 
-                        free(sender_link_name);
+                        amqpvalue_destroy(target);
                     }
 
-                    amqpvalue_destroy(target);
+                    amqpvalue_destroy(source);
                 }
-
-                amqpvalue_destroy(source);
             }
         }
     }
