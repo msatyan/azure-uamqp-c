@@ -560,7 +560,7 @@ AMQP_MANAGEMENT_HANDLE amqp_management_create(SESSION_HANDLE session, const char
                                 (void)strcat(receiver_link_name, receiver_suffix);
 
                                 /* Codes_SRS_AMQP_MANAGEMENT_01_006: [ `amqp_management_create` shall create a sender link by calling `link_create`. ]*/
-                                result->sender_link = link_create(session, "cbs-sender", role_sender, source, target);
+                                result->sender_link = link_create(session, sender_link_name, role_sender, source, target);
                                 if (result->sender_link == NULL)
                                 {
                                     free(result);
@@ -569,7 +569,7 @@ AMQP_MANAGEMENT_HANDLE amqp_management_create(SESSION_HANDLE session, const char
                                 else
                                 {
                                     /* Codes_SRS_AMQP_MANAGEMENT_01_015: [ `amqp_management_create` shall create a receiver link by calling `link_create`. ]*/
-                                    result->receiver_link = link_create(session, "cbs-receiver", role_receiver, source, target);
+                                    result->receiver_link = link_create(session, receiver_link_name, role_receiver, source, target);
                                     if (result->receiver_link == NULL)
                                     {
                                         link_destroy(result->sender_link);

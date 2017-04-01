@@ -14,6 +14,7 @@
 #include "umock_c.h"
 #include "umocktypes_charptr.h"
 #include "umocktypes_bool.h"
+#include "umocktypes_stdint.h"
 #include "umock_c_negative_tests.h"
 
 static void* my_gballoc_malloc(size_t size)
@@ -94,6 +95,9 @@ TEST_SUITE_INITIALIZE(suite_init)
     ASSERT_ARE_EQUAL(int, 0, result);
 
     result = umocktypes_bool_register_types();
+    ASSERT_ARE_EQUAL(int, 0, result);
+
+    result = umocktypes_stdint_register_types();
     ASSERT_ARE_EQUAL(int, 0, result);
 
     REGISTER_TYPE(role, role);
