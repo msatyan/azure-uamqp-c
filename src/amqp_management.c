@@ -708,6 +708,7 @@ int amqp_management_open_async(AMQP_MANAGEMENT_HANDLE amqp_management, ON_AMQP_M
 {
     int result;
 
+    /* Codes_SRS_AMQP_MANAGEMENT_01_044: [ `on_amqp_management_open_complete_context` and `on_amqp_management_error_context` shall be allowed to be NULL. ]*/
     if ((amqp_management == NULL) ||
         (on_amqp_management_open_complete == NULL) ||
         (on_amqp_management_error == NULL))
@@ -717,6 +718,12 @@ int amqp_management_open_async(AMQP_MANAGEMENT_HANDLE amqp_management, ON_AMQP_M
             amqp_management,
             on_amqp_management_open_complete,
             on_amqp_management_error);
+        result = __FAILURE__;
+    }
+    else if (amqp_management->amqp_management_state != AMQP_MANAGEMENT_STATE_IDLE)
+    {
+        /* Codes_SRS_AMQP_MANAGEMENT_01_043: [ If the AMQP management instance is already OPEN or OPENING, `amqp_management_open_async` shall fail and return a non-zero value. ]*/
+        LogError("AMQP management instance already OPEN");
         result = __FAILURE__;
     }
     else
@@ -764,18 +771,32 @@ int amqp_management_close(AMQP_MANAGEMENT_HANDLE amqp_management)
 
     if (amqp_management == NULL)
     {
+        /* Codes_SRS_AMQP_MANAGEMENT_01_047: [ If `amqp_management` is NULL, `amqp_management_close` shall fail and return a non-zero value. ]*/
+        LogError("NULL amqp_management");
         result = __FAILURE__;
     }
     else
     {
-        if ((messagesender_close(amqp_management->message_sender) != 0) ||
-            (messagereceiver_close(amqp_management->message_receiver) != 0))
+        /* Codes_SRS_AMQP_MANAGEMENT_01_045: [ `amqp_management_close` shall close the AMQP management instance. ]*/
+        /* Codes_SRS_AMQP_MANAGEMENT_01_050: [ `amqp_management_close` shall close the message sender by calling `messagesender_close`. ]*/
+        if (messagesender_close(amqp_management->message_sender) != 0)
         {
+            /* Codes_SRS_AMQP_MANAGEMENT_01_052: [ If `messagesender_close` fails, `amqp_management_close` shall fail and return a non-zero value. ]*/
+            LogError("messagesender_close failed");
+            result = __FAILURE__;
+        }
+        /* Codes_SRS_AMQP_MANAGEMENT_01_051: [ `amqp_management_close` shall close the message receiver by calling `messagereceiver_close`. ]*/
+        else if (messagereceiver_close(amqp_management->message_receiver) != 0)
+        {
+            /* Codes_SRS_AMQP_MANAGEMENT_01_053: [ If `messagereceiver_close` fails, `amqp_management_close` shall fail and return a non-zero value. ]*/
+            LogError("messagereceiver_close failed");
             result = __FAILURE__;
         }
         else
         {
             amqp_management->amqp_management_state = AMQP_MANAGEMENT_STATE_IDLE;
+
+            /* Codes_SRS_AMQP_MANAGEMENT_01_046: [ On success it shall return 0. ]*/
             result = 0;
         }
     }
@@ -868,10 +889,10 @@ int amqp_management_execute_operation_async(AMQP_MANAGEMENT_HANDLE amqp_manageme
     return result;
 }
 
-void amqp_management_set_trace(AMQP_MANAGEMENT_HANDLE amqp_management, bool traceOn)
+void amqp_management_set_trace(AMQP_MANAGEMENT_HANDLE amqp_management, bool trace_on)
 {
     if (amqp_management != NULL)
     {
-        messagesender_set_trace(amqp_management->message_sender, traceOn);
+        messagesender_set_trace(amqp_management->message_sender, trace_on);
     }
 }

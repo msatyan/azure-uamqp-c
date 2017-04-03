@@ -396,6 +396,29 @@ TEST_FUNCTION(amqp_management_open_async_opens_the_message_sender_and_message_re
     amqp_management_destroy(amqp_management);
 }
 
+/* Tests_SRS_AMQP_MANAGEMENT_01_044: [ `on_amqp_management_open_complete_context` and `on_amqp_management_error_context` shall be allowed to be NULL. ]*/
+TEST_FUNCTION(amqp_management_open_async_with_NULL_context_arguments_opens_the_message_sender_and_message_receiver)
+{
+    // arrange
+    AMQP_MANAGEMENT_HANDLE amqp_management;
+    int result;
+    amqp_management = amqp_management_create(test_session_handle, "test_node");
+    umock_c_reset_all_calls();
+
+    STRICT_EXPECTED_CALL(messagereceiver_open(test_message_receiver, IGNORED_PTR_ARG, IGNORED_PTR_ARG));
+    STRICT_EXPECTED_CALL(messagesender_open(test_message_sender));
+
+    // act
+    result = amqp_management_open_async(amqp_management, test_on_amqp_management_open_complete, NULL, test_on_amqp_management_error, NULL);
+
+    // assert
+    ASSERT_ARE_EQUAL(int, 0, result);
+    ASSERT_ARE_EQUAL(char_ptr, umock_c_get_expected_calls(), umock_c_get_actual_calls());
+
+    // cleanup
+    amqp_management_destroy(amqp_management);
+}
+
 /* Tests_SRS_AMQP_MANAGEMENT_01_042: [ If `messagereceiver_open` fails, `amqp_management_open_async` shall fail and return a non-zero value. ]*/
 TEST_FUNCTION(when_opening_the_receiver_fails_amqp_management_open_async_fails)
 {
@@ -489,6 +512,118 @@ TEST_FUNCTION(amqp_management_open_async_with_NULL_error_complete_callback_fails
 
     // act
     result = amqp_management_open_async(amqp_management, test_on_amqp_management_open_complete, (void*)0x4242, NULL, (void*)0x4243);
+
+    // assert
+    ASSERT_ARE_NOT_EQUAL(int, 0, result);
+    ASSERT_ARE_EQUAL(char_ptr, umock_c_get_expected_calls(), umock_c_get_actual_calls());
+
+    // cleanup
+    amqp_management_destroy(amqp_management);
+}
+
+/* Tests_SRS_AMQP_MANAGEMENT_01_043: [ If the AMQP management instance is already OPEN or OPENING, `amqp_management_open_async` shall fail and return a non-zero value. ]*/
+TEST_FUNCTION(amqp_management_open_async_when_opening_fails)
+{
+    // arrange
+    AMQP_MANAGEMENT_HANDLE amqp_management;
+    int result;
+    amqp_management = amqp_management_create(test_session_handle, "test_node");
+    (void)amqp_management_open_async(amqp_management, test_on_amqp_management_open_complete, (void*)0x4242, test_on_amqp_management_error, (void*)0x4243);
+    umock_c_reset_all_calls();
+
+    // act
+    result = amqp_management_open_async(amqp_management, test_on_amqp_management_open_complete, (void*)0x4242, test_on_amqp_management_error, (void*)0x4243);
+
+    // assert
+    ASSERT_ARE_NOT_EQUAL(int, 0, result);
+    ASSERT_ARE_EQUAL(char_ptr, umock_c_get_expected_calls(), umock_c_get_actual_calls());
+
+    // cleanup
+    amqp_management_destroy(amqp_management);
+}
+
+/* amqp_management_close */
+
+/* Tests_SRS_AMQP_MANAGEMENT_01_045: [ `amqp_management_close` shall close the AMQP management instance. ]*/
+/* Tests_SRS_AMQP_MANAGEMENT_01_046: [ On success it shall return 0. ]*/
+/* Tests_SRS_AMQP_MANAGEMENT_01_050: [ `amqp_management_close` shall close the message sender by calling `messagesender_close`. ]*/
+/* Tests_SRS_AMQP_MANAGEMENT_01_051: [ `amqp_management_close` shall close the message receiver by calling `messagereceiver_close`. ]*/
+TEST_FUNCTION(amqp_management_close_closes_the_message_sender_and_message_receiver)
+{
+    // arrange
+    AMQP_MANAGEMENT_HANDLE amqp_management;
+    int result;
+    amqp_management = amqp_management_create(test_session_handle, "test_node");
+    (void)amqp_management_open_async(amqp_management, test_on_amqp_management_open_complete, (void*)0x4242, test_on_amqp_management_error, (void*)0x4243);
+    umock_c_reset_all_calls();
+
+    STRICT_EXPECTED_CALL(messagesender_close(test_message_sender));
+    STRICT_EXPECTED_CALL(messagereceiver_close(test_message_receiver));
+
+    // act
+    result = amqp_management_close(amqp_management);
+
+    // assert
+    ASSERT_ARE_EQUAL(int, 0, result);
+    ASSERT_ARE_EQUAL(char_ptr, umock_c_get_expected_calls(), umock_c_get_actual_calls());
+
+    // cleanup
+    amqp_management_destroy(amqp_management);
+}
+
+/* Tests_SRS_AMQP_MANAGEMENT_01_047: [ If `amqp_management` is NULL, `amqp_management_close` shall fail and return a non-zero value. ]*/
+TEST_FUNCTION(amqp_management_close_with_NULL_handle_fails)
+{
+    // arrange
+    int result;
+
+    // act
+    result = amqp_management_close(NULL);
+
+    // assert
+    ASSERT_ARE_NOT_EQUAL(int, 0, result);
+    ASSERT_ARE_EQUAL(char_ptr, umock_c_get_expected_calls(), umock_c_get_actual_calls());
+}
+
+/* Tests_SRS_AMQP_MANAGEMENT_01_052: [ If `messagesender_close` fails, `amqp_management_close` shall fail and return a non-zero value. ]*/
+TEST_FUNCTION(when_closing_the_sender_fails_amqp_management_close_fails)
+{
+    // arrange
+    AMQP_MANAGEMENT_HANDLE amqp_management;
+    int result;
+    amqp_management = amqp_management_create(test_session_handle, "test_node");
+    (void)amqp_management_open_async(amqp_management, test_on_amqp_management_open_complete, (void*)0x4242, test_on_amqp_management_error, (void*)0x4243);
+    umock_c_reset_all_calls();
+
+    STRICT_EXPECTED_CALL(messagesender_close(test_message_sender))
+        .SetReturn(1);
+
+    // act
+    result = amqp_management_close(amqp_management);
+
+    // assert
+    ASSERT_ARE_NOT_EQUAL(int, 0, result);
+    ASSERT_ARE_EQUAL(char_ptr, umock_c_get_expected_calls(), umock_c_get_actual_calls());
+
+    // cleanup
+    amqp_management_destroy(amqp_management);
+}
+
+/* Tests_SRS_AMQP_MANAGEMENT_01_053: [ If `messagereceiver_close` fails, `amqp_management_close` shall fail and return a non-zero value. ]*/
+TEST_FUNCTION(when_closing_the_receiver_fails_amqp_management_close_fails)
+{
+    // arrange
+    AMQP_MANAGEMENT_HANDLE amqp_management;
+    int result;
+    amqp_management = amqp_management_create(test_session_handle, "test_node");
+    (void)amqp_management_open_async(amqp_management, test_on_amqp_management_open_complete, (void*)0x4242, test_on_amqp_management_error, (void*)0x4243);
+    umock_c_reset_all_calls();
+
+    STRICT_EXPECTED_CALL(messagesender_close(test_message_sender))
+        .SetReturn(1);
+
+    // act
+    result = amqp_management_close(amqp_management);
 
     // assert
     ASSERT_ARE_NOT_EQUAL(int, 0, result);
