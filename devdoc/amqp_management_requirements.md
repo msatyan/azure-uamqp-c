@@ -11,7 +11,8 @@
     {
         AMQP_MANAGEMENT_EXECUTE_OPERATION_OK,
         AMQP_MANAGEMENT_EXECUTE_OPERATION_ERROR,
-        AMQP_MANAGEMENT_EXECUTE_OPERATION_FAILED_BAD_STATUS
+        AMQP_MANAGEMENT_EXECUTE_OPERATION_FAILED_BAD_STATUS,
+        AMQP_MANAGEMENT_EXECUTE_OPERATION_BECAUSE_DESTROY
     } AMQP_MANAGEMENT_EXECUTE_OPERATION_RESULT;
 
     typedef enum AMQP_MANAGEMENT_OPEN_RESULT_TAG
@@ -42,30 +43,31 @@ AMQP_MANAGEMENT_HANDLE amqp_management_create(SESSION_HANDLE session, const char
 
 XX**SRS_AMQP_MANAGEMENT_01_001: [** `amqp_management_create` shall create a new CBS instance and on success return a non-NULL handle to it. **]**
 XX**SRS_AMQP_MANAGEMENT_01_002: [** If `session` or `management_node` is NULL then `amqp_management_create` shall fail and return NULL. **]**
-**SRS_AMQP_MANAGEMENT_01_030: [** If `management_node` is an empty string, then `amqp_management_create` shall fail and return NULL. **]**
+XX**SRS_AMQP_MANAGEMENT_01_030: [** If `management_node` is an empty string, then `amqp_management_create` shall fail and return NULL. **]**
 XX**SRS_AMQP_MANAGEMENT_01_003: [** `amqp_management_create` shall create a singly linked list for pending operations by calling `singlylinkedlist_create`. **]**
-**SRS_AMQP_MANAGEMENT_01_004: [** If `singlylinkedlist_create` fails, `amqp_management_create` shall fail and return NULL. **]**
-**SRS_AMQP_MANAGEMENT_01_005: [** If allocating memory for the new handle fails, `amqp_management_create` shall fail and return NULL. **]**
+XX**SRS_AMQP_MANAGEMENT_01_004: [** If `singlylinkedlist_create` fails, `amqp_management_create` shall fail and return NULL. **]**
+XX**SRS_AMQP_MANAGEMENT_01_005: [** If allocating memory for the new handle fails, `amqp_management_create` shall fail and return NULL. **]**
 XX**SRS_AMQP_MANAGEMENT_01_006: [** `amqp_management_create` shall create a sender link by calling `link_create`. **]**
-**SRS_AMQP_MANAGEMENT_01_007: [** The `session` argument shall be set to `session`. **]**
-**SRS_AMQP_MANAGEMENT_01_008: [** The `name` argument shall be constructed by concatenating the `management_node` value with `-sender`. **]**
-**SRS_AMQP_MANAGEMENT_01_009: [** The `role` argument shall be `role_sender`. **]**
+XX**SRS_AMQP_MANAGEMENT_01_007: [** The `session` argument shall be set to `session`. **]**
+XX**SRS_AMQP_MANAGEMENT_01_008: [** The `name` argument shall be constructed by concatenating the `management_node` value with `-sender`. **]**
+XX**SRS_AMQP_MANAGEMENT_01_009: [** The `role` argument shall be `role_sender`. **]**
 XX**SRS_AMQP_MANAGEMENT_01_010: [** The `source` argument shall be a value created by calling `messaging_create_source` with `management_node` as argument. **]**
 XX**SRS_AMQP_MANAGEMENT_01_011: [** The `target` argument shall be a value created by calling `messaging_create_target` with `management_node` as argument. **]**
-**SRS_AMQP_MANAGEMENT_01_012: [** If `messaging_create_source` fails then `amqp_management_create` shall fail and return NULL. **]**
-**SRS_AMQP_MANAGEMENT_01_013: [** If `messaging_create_target` fails then `amqp_management_create` shall fail and return NULL. **]**
-**SRS_AMQP_MANAGEMENT_01_014: [** If `link_create` fails when creating the sender link then `amqp_management_create` shall fail and return NULL. **]**
+XX**SRS_AMQP_MANAGEMENT_01_012: [** If `messaging_create_source` fails then `amqp_management_create` shall fail and return NULL. **]**
+XX**SRS_AMQP_MANAGEMENT_01_013: [** If `messaging_create_target` fails then `amqp_management_create` shall fail and return NULL. **]**
+XX**SRS_AMQP_MANAGEMENT_01_014: [** If `link_create` fails when creating the sender link then `amqp_management_create` shall fail and return NULL. **]**
 XX**SRS_AMQP_MANAGEMENT_01_015: [** `amqp_management_create` shall create a receiver link by calling `link_create`. **]**
-**SRS_AMQP_MANAGEMENT_01_016: [** The `session` argument shall be set to `session`. **]**
-**SRS_AMQP_MANAGEMENT_01_017: [** The `name` argument shall be constructed by concatenating the `management_node` value with `-receiver`. **]**
-**SRS_AMQP_MANAGEMENT_01_018: [** The `role` argument shall be `role_receiver`. **]**
-**SRS_AMQP_MANAGEMENT_01_019: [** The `source` argument shall be the value created by calling `messaging_create_source`. **]**
-**SRS_AMQP_MANAGEMENT_01_020: [** The `target` argument shall be the value created by calling `messaging_create_target`. **]**
-**SRS_AMQP_MANAGEMENT_01_021: [** If `link_create` fails when creating the receiver link then `amqp_management_create` shall fail and return NULL. **]**
+XX**SRS_AMQP_MANAGEMENT_01_016: [** The `session` argument shall be set to `session`. **]**
+XX**SRS_AMQP_MANAGEMENT_01_017: [** The `name` argument shall be constructed by concatenating the `management_node` value with `-receiver`. **]**
+XX**SRS_AMQP_MANAGEMENT_01_018: [** The `role` argument shall be `role_receiver`. **]**
+XX**SRS_AMQP_MANAGEMENT_01_019: [** The `source` argument shall be the value created by calling `messaging_create_source`. **]**
+XX**SRS_AMQP_MANAGEMENT_01_020: [** The `target` argument shall be the value created by calling `messaging_create_target`. **]**
+XX**SRS_AMQP_MANAGEMENT_01_021: [** If `link_create` fails when creating the receiver link then `amqp_management_create` shall fail and return NULL. **]**
 XX**SRS_AMQP_MANAGEMENT_01_022: [** `amqp_management_create` shall create a message sender by calling `messagesender_create` and passing to it the sender link handle. **]**
-**SRS_AMQP_MANAGEMENT_01_023: [** `amqp_management_create` shall create a message receiver by calling `messagereceiver_create` and passing to it the receiver link handle. **]**
-**SRS_AMQP_MANAGEMENT_01_031: [** If `messagesender_create` fails then `amqp_management_create` shall fail and return NULL. **]**
-**SRS_AMQP_MANAGEMENT_01_032: [** If `messagereceiver_create` fails then `amqp_management_create` shall fail and return NULL. **]**
+XX**SRS_AMQP_MANAGEMENT_01_023: [** `amqp_management_create` shall create a message receiver by calling `messagereceiver_create` and passing to it the receiver link handle. **]**
+XX**SRS_AMQP_MANAGEMENT_01_031: [** If `messagesender_create` fails then `amqp_management_create` shall fail and return NULL. **]**
+XX**SRS_AMQP_MANAGEMENT_01_032: [** If `messagereceiver_create` fails then `amqp_management_create` shall fail and return NULL. **]**
+XX**SRS_AMQP_MANAGEMENT_01_033: [** If any other error occurs `amqp_management_create` shall fail and return NULL. **]**
 
 ### amqp_management_destroy
 
@@ -73,9 +75,44 @@ XX**SRS_AMQP_MANAGEMENT_01_022: [** `amqp_management_create` shall create a mess
 void amqp_management_destroy(AMQP_MANAGEMENT_HANDLE amqp_management);
 ```
 
-**SRS_AMQP_MANAGEMENT_01_024: [** `amqp_management_destroy` shall free all the resources allocated by `amqp_management_create`. **]**
-**SRS_AMQP_MANAGEMENT_01_025: [** If `amqp_management` is NULL, `amqp_management_destroy` shall do nothing. **]**
-**SRS_AMQP_MANAGEMENT_01_026: [** `amqp_management_destroy` shall free the singly linked list by calling `singlylinkedlist_destroy`. **]**
-**SRS_AMQP_MANAGEMENT_01_027: [** `amqp_management_destroy` shall free the sender and receiver links by calling `link_destroy`. **]**
-**SRS_AMQP_MANAGEMENT_01_028: [** `amqp_management_destroy` shall free the message sender by calling `messagesender_destroy`. **]**
-**SRS_AMQP_MANAGEMENT_01_029: [** `amqp_management_destroy` shall free the message receiver by calling `messagereceiver_destroy`. **]**
+XX**SRS_AMQP_MANAGEMENT_01_024: [** `amqp_management_destroy` shall free all the resources allocated by `amqp_management_create`. **]**
+XX**SRS_AMQP_MANAGEMENT_01_025: [** If `amqp_management` is NULL, `amqp_management_destroy` shall do nothing. **]**
+XX**SRS_AMQP_MANAGEMENT_01_026: [** `amqp_management_destroy` shall free the singly linked list by calling `singlylinkedlist_destroy`. **]**
+XX**SRS_AMQP_MANAGEMENT_01_027: [** `amqp_management_destroy` shall free the sender and receiver links by calling `link_destroy`. **]**
+XX**SRS_AMQP_MANAGEMENT_01_028: [** `amqp_management_destroy` shall free the message sender by calling `messagesender_destroy`. **]**
+XX**SRS_AMQP_MANAGEMENT_01_029: [** `amqp_management_destroy` shall free the message receiver by calling `messagereceiver_destroy`. **]**
+**SRS_AMQP_MANAGEMENT_01_034: [** If the AMQP management instance is OPEN or OPENING, `amqp_management_destroy` shall also perform all actions that would be done by `amqp_management_close`. **]**
+**SRS_AMQP_MANAGEMENT_01_035: [** Any pending AMQP management operations shall be indicated as cancelled by calling `on_execute_operation_complete` with `AMQP_MANAGEMENT_EXECUTE_OPERATION_BECAUSE_DESTROY`. **]**
+
+### amqp_management_open_async
+
+```c
+int amqp_management_open_async(AMQP_MANAGEMENT_HANDLE amqp_management, ON_AMQP_MANAGEMENT_OPEN_COMPLETE on_amqp_management_open_complete, void* on_amqp_management_open_complete_context, ON_AMQP_MANAGEMENT_ERROR on_amqp_management_error, void* on_amqp_management_error_context);
+```
+
+XX**SRS_AMQP_MANAGEMENT_01_036: [** `amqp_management_open_async` shall start opening the AMQP management instance and save the callbacks so that they can be called when opening is complete. **]**
+XX**SRS_AMQP_MANAGEMENT_01_037: [** On success it shall return 0. **]**
+**SRS_AMQP_MANAGEMENT_01_038: [** If `amqp_management`, `on_amqp_management_open_complete` or `on_amqp_management_error` is NULL, `amqp_management_open_async` shall fail and return a non-zero value. **]**
+XX**SRS_AMQP_MANAGEMENT_01_039: [** `amqp_management_open_async` shall open the message sender by calling `messagesender_open`. **]**
+XX**SRS_AMQP_MANAGEMENT_01_040: [** `amqp_management_open_async` shall open the message receiver by calling `messagereceiver_open`. **]**
+XX**SRS_AMQP_MANAGEMENT_01_041: [** If `messagesender_open` fails, `amqp_management_open_async` shall fail and return a non-zero value. **]**
+XX**SRS_AMQP_MANAGEMENT_01_042: [** If `messagereceiver_open` fails, `amqp_management_open_async` shall fail and return a non-zero value. **]**
+**SRS_AMQP_MANAGEMENT_01_043: [** If the AMQP management instance is already OPEN or OPENING, `amqp_management_open_async` shall fail and return a non-zero value. **]**
+
+### amqp_management_close
+
+```c
+int amqp_management_close(AMQP_MANAGEMENT_HANDLE amqp_management);
+```
+
+### amqp_management_execute_operation_async
+
+```c
+int amqp_management_execute_operation_async(AMQP_MANAGEMENT_HANDLE amqp_management, const char* operation, const char* type, const char* locales, MESSAGE_HANDLE message, ON_AMQP_MANAGEMENT_EXECUTE_OPERATION_COMPLETE on_execute_operation_complete, void* context);
+```
+
+### amqp_management_set_trace
+
+```c
+void amqp_management_set_trace(AMQP_MANAGEMENT_HANDLE amqp_management, bool traceOn);
+```

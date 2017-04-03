@@ -69,8 +69,15 @@ static TEST_MUTEX_HANDLE g_dllByDll;
 
 DEFINE_ENUM_STRINGS(UMOCK_C_ERROR_CODE, UMOCK_C_ERROR_CODE_VALUES)
 
+#ifndef __cplusplus
 TEST_DEFINE_ENUM_TYPE(role, role_VALUES);
+#endif
 IMPLEMENT_UMOCK_C_ENUM_TYPE(role, role_VALUES);
+
+MOCK_FUNCTION_WITH_CODE(, void, test_on_amqp_management_open_complete, void*, context, AMQP_MANAGEMENT_OPEN_RESULT, open_result);
+MOCK_FUNCTION_END();
+MOCK_FUNCTION_WITH_CODE(, void, test_on_amqp_management_error, void*, context);
+MOCK_FUNCTION_END();
 
 static void on_umock_c_error(UMOCK_C_ERROR_CODE error_code)
 {
@@ -109,6 +116,7 @@ TEST_SUITE_INITIALIZE(suite_init)
     REGISTER_GLOBAL_MOCK_RETURN(messaging_create_target, test_target_amqp_value);
     REGISTER_GLOBAL_MOCK_RETURN(messagesender_create, test_message_sender);
     REGISTER_GLOBAL_MOCK_RETURN(messagereceiver_create, test_message_receiver);
+    REGISTER_GLOBAL_MOCK_RETURN(link_create, test_sender_link);
     
     REGISTER_UMOCK_ALIAS_TYPE(AMQP_MANAGEMENT_HANDLE, void*);
     REGISTER_UMOCK_ALIAS_TYPE(SINGLYLINKEDLIST_HANDLE, void*);
@@ -117,6 +125,14 @@ TEST_SUITE_INITIALIZE(suite_init)
     REGISTER_UMOCK_ALIAS_TYPE(LINK_HANDLE, void*);
     REGISTER_UMOCK_ALIAS_TYPE(ON_MESSAGE_SENDER_STATE_CHANGED, void*);
     REGISTER_UMOCK_ALIAS_TYPE(ON_MESSAGE_RECEIVER_STATE_CHANGED, void*);
+    REGISTER_UMOCK_ALIAS_TYPE(MESSAGE_SENDER_HANDLE, void*);
+    REGISTER_UMOCK_ALIAS_TYPE(MESSAGE_RECEIVER_HANDLE, void*);
+    REGISTER_UMOCK_ALIAS_TYPE(ON_MESSAGE_RECEIVED, void*);
+
+    REGISTER_UMOCKC_PAIRED_CREATE_DESTROY_CALLS(link_create, link_destroy);
+    REGISTER_UMOCKC_PAIRED_CREATE_DESTROY_CALLS(messagesender_create, messagesender_destroy);
+    REGISTER_UMOCKC_PAIRED_CREATE_DESTROY_CALLS(messagereceiver_create, messagereceiver_destroy);
+    REGISTER_UMOCKC_PAIRED_CREATE_DESTROY_CALLS(singlylinkedlist_create, singlylinkedlist_destroy);
 }
 
 TEST_SUITE_CLEANUP(suite_cleanup)
@@ -151,6 +167,15 @@ TEST_FUNCTION_CLEANUP(test_cleanup)
 /* Tests_SRS_AMQP_MANAGEMENT_01_011: [ The `target` argument shall be a value created by calling `messaging_create_target` with `management_node` as argument. ]*/
 /* Tests_SRS_AMQP_MANAGEMENT_01_015: [ `amqp_management_create` shall create a receiver link by calling `link_create`. ]*/
 /* Tests_SRS_AMQP_MANAGEMENT_01_022: [ `amqp_management_create` shall create a message sender by calling `messagesender_create` and passing to it the sender link handle. ]*/
+/* Tests_SRS_AMQP_MANAGEMENT_01_023: [ `amqp_management_create` shall create a message receiver by calling `messagereceiver_create` and passing to it the receiver link handle. ]*/
+/* Tests_SRS_AMQP_MANAGEMENT_01_007: [ The `session` argument shall be set to `session`. ]*/
+/* Tests_SRS_AMQP_MANAGEMENT_01_008: [ The `name` argument shall be constructed by concatenating the `management_node` value with `-sender`. ]*/
+/* Tests_SRS_AMQP_MANAGEMENT_01_009: [ The `role` argument shall be `role_sender`. ]*/
+/* Tests_SRS_AMQP_MANAGEMENT_01_016: [ The `session` argument shall be set to `session`. ]*/
+/* Tests_SRS_AMQP_MANAGEMENT_01_017: [ The `name` argument shall be constructed by concatenating the `management_node` value with `-receiver`. ]*/
+/* Tests_SRS_AMQP_MANAGEMENT_01_018: [ The `role` argument shall be `role_receiver`. ]*/
+/* Tests_SRS_AMQP_MANAGEMENT_01_019: [ The `source` argument shall be the value created by calling `messaging_create_source`. ]*/
+/* Tests_SRS_AMQP_MANAGEMENT_01_020: [ The `target` argument shall be the value created by calling `messaging_create_target`. ]*/
 TEST_FUNCTION(amqp_management_create_returns_a_valid_handle)
 {
     // arrange
@@ -165,11 +190,13 @@ TEST_FUNCTION(amqp_management_create_returns_a_valid_handle)
     STRICT_EXPECTED_CALL(link_create(test_session_handle, "test_node-sender", role_sender, test_source_amqp_value, test_target_amqp_value))
         .SetReturn(test_sender_link);
     STRICT_EXPECTED_CALL(link_create(test_session_handle, "test_node-receiver", role_receiver, test_source_amqp_value, test_target_amqp_value))
-        .SetReturn(test_receiver_link);;
+        .SetReturn(test_receiver_link);
     STRICT_EXPECTED_CALL(messagesender_create(test_sender_link, IGNORED_PTR_ARG, IGNORED_PTR_ARG));
-    STRICT_EXPECTED_CALL(messagereceiver_create(test_sender_link, IGNORED_PTR_ARG, IGNORED_PTR_ARG));
+    STRICT_EXPECTED_CALL(messagereceiver_create(test_receiver_link, IGNORED_PTR_ARG, IGNORED_PTR_ARG));
     STRICT_EXPECTED_CALL(gballoc_free(IGNORED_PTR_ARG));
     STRICT_EXPECTED_CALL(gballoc_free(IGNORED_PTR_ARG));
+    STRICT_EXPECTED_CALL(amqpvalue_destroy(IGNORED_PTR_ARG));
+    STRICT_EXPECTED_CALL(amqpvalue_destroy(IGNORED_PTR_ARG));
 
     // act
     amqp_management = amqp_management_create(test_session_handle, "test_node");
@@ -208,6 +235,267 @@ TEST_FUNCTION(amqp_management_create_with_NULL_management_node_fails)
     // assert
     ASSERT_IS_NULL(amqp_management);
     ASSERT_ARE_EQUAL(char_ptr, umock_c_get_expected_calls(), umock_c_get_actual_calls());
+}
+
+/* Tests_SRS_AMQP_MANAGEMENT_01_030: [ If `management_node` is an empty string, then `amqp_management_create` shall fail and return NULL. ]*/
+TEST_FUNCTION(amqp_management_create_with_empty_string_for_management_node_fails)
+{
+    // arrange
+    AMQP_MANAGEMENT_HANDLE amqp_management;
+
+    // act
+    amqp_management = amqp_management_create(test_session_handle, "");
+
+    // assert
+    ASSERT_IS_NULL(amqp_management);
+    ASSERT_ARE_EQUAL(char_ptr, umock_c_get_expected_calls(), umock_c_get_actual_calls());
+}
+
+/* Tests_SRS_AMQP_MANAGEMENT_01_004: [ If `singlylinkedlist_create` fails, `amqp_management_create` shall fail and return NULL. ]*/
+/* Tests_SRS_AMQP_MANAGEMENT_01_005: [ If allocating memory for the new handle fails, `amqp_management_create` shall fail and return NULL. ]*/
+/* Tests_SRS_AMQP_MANAGEMENT_01_012: [ If `messaging_create_source` fails then `amqp_management_create` shall fail and return NULL. ]*/
+/* Tests_SRS_AMQP_MANAGEMENT_01_013: [ If `messaging_create_target` fails then `amqp_management_create` shall fail and return NULL. ]*/
+/* Tests_SRS_AMQP_MANAGEMENT_01_014: [ If `link_create` fails when creating the sender link then `amqp_management_create` shall fail and return NULL. ]*/
+/* Tests_SRS_AMQP_MANAGEMENT_01_021: [ If `link_create` fails when creating the receiver link then `amqp_management_create` shall fail and return NULL. ]*/
+/* Tests_SRS_AMQP_MANAGEMENT_01_031: [ If `messagesender_create` fails then `amqp_management_create` shall fail and return NULL. ]*/
+/* Tests_SRS_AMQP_MANAGEMENT_01_032: [ If `messagereceiver_create` fails then `amqp_management_create` shall fail and return NULL. ]*/
+/* Tests_SRS_AMQP_MANAGEMENT_01_033: [ If any other error occurs `amqp_management_create` shall fail and return NULL. ]*/
+TEST_FUNCTION(when_any_undelying_function_call_fails_amqp_management_create_fails)
+{
+    // arrange
+    int negativeTestsInitResult = umock_c_negative_tests_init();
+    size_t count;
+    size_t index;
+    ASSERT_ARE_EQUAL(int, 0, negativeTestsInitResult);
+
+    STRICT_EXPECTED_CALL(gballoc_malloc(IGNORED_NUM_ARG))
+        .SetFailReturn(NULL);
+    STRICT_EXPECTED_CALL(singlylinkedlist_create())
+        .SetFailReturn(NULL);
+    STRICT_EXPECTED_CALL(messaging_create_source("test_node"))
+        .SetFailReturn(NULL);
+    STRICT_EXPECTED_CALL(messaging_create_target("test_node"))
+        .SetFailReturn(NULL);
+    STRICT_EXPECTED_CALL(gballoc_malloc(IGNORED_NUM_ARG))
+        .SetFailReturn(NULL);
+    STRICT_EXPECTED_CALL(gballoc_malloc(IGNORED_NUM_ARG))
+        .SetFailReturn(NULL);
+    STRICT_EXPECTED_CALL(link_create(test_session_handle, "test_node-sender", role_sender, test_source_amqp_value, test_target_amqp_value))
+        .SetReturn(test_sender_link)
+        .SetFailReturn(NULL);
+    STRICT_EXPECTED_CALL(link_create(test_session_handle, "test_node-receiver", role_receiver, test_source_amqp_value, test_target_amqp_value))
+        .SetReturn(test_receiver_link)
+        .SetFailReturn(NULL);
+    STRICT_EXPECTED_CALL(messagesender_create(test_sender_link, IGNORED_PTR_ARG, IGNORED_PTR_ARG))
+        .SetFailReturn(NULL);
+    STRICT_EXPECTED_CALL(messagereceiver_create(test_receiver_link, IGNORED_PTR_ARG, IGNORED_PTR_ARG))
+        .SetFailReturn(NULL);
+    STRICT_EXPECTED_CALL(gballoc_free(IGNORED_PTR_ARG));
+    STRICT_EXPECTED_CALL(gballoc_free(IGNORED_PTR_ARG));
+    STRICT_EXPECTED_CALL(amqpvalue_destroy(IGNORED_PTR_ARG));
+    STRICT_EXPECTED_CALL(amqpvalue_destroy(IGNORED_PTR_ARG));
+    umock_c_negative_tests_snapshot();
+
+    count = umock_c_negative_tests_call_count();
+    for (index = 0; index < count - 4; index++)
+    {
+        char tmp_msg[128];
+        AMQP_MANAGEMENT_HANDLE amqp_management;
+        (void)sprintf(tmp_msg, "Failure in test %u/%u", (unsigned int)(index + 1), (unsigned int)count);
+
+        umock_c_negative_tests_reset();
+        umock_c_negative_tests_fail_call(index);
+
+        // act
+        amqp_management = amqp_management_create(test_session_handle, "test_node");
+
+        // assert
+        ASSERT_IS_NULL_WITH_MSG(amqp_management, tmp_msg);
+    }
+
+    // cleanup
+    umock_c_negative_tests_deinit();
+}
+
+/* amqp_management_destroy */
+
+/* Tests_SRS_AMQP_MANAGEMENT_01_024: [ `amqp_management_destroy` shall free all the resources allocated by `amqp_management_create`. ]*/
+/* Tests_SRS_AMQP_MANAGEMENT_01_026: [ `amqp_management_destroy` shall free the singly linked list by calling `singlylinkedlist_destroy`. ]*/
+/* Tests_SRS_AMQP_MANAGEMENT_01_027: [ `amqp_management_destroy` shall free the sender and receiver links by calling `link_destroy`. ]*/
+/* Tests_SRS_AMQP_MANAGEMENT_01_028: [ `amqp_management_destroy` shall free the message sender by calling `messagesender_destroy`. ]*/
+/* Tests_SRS_AMQP_MANAGEMENT_01_029: [ `amqp_management_destroy` shall free the message receiver by calling `messagereceiver_destroy`. ]*/
+TEST_FUNCTION(amqp_management_destroy_frees_all_the_allocated_resources)
+{
+    // arrange
+    AMQP_MANAGEMENT_HANDLE amqp_management;
+
+    STRICT_EXPECTED_CALL(gballoc_malloc(IGNORED_NUM_ARG));
+    STRICT_EXPECTED_CALL(singlylinkedlist_create());
+    STRICT_EXPECTED_CALL(messaging_create_source("test_node"));
+    STRICT_EXPECTED_CALL(messaging_create_target("test_node"));
+    STRICT_EXPECTED_CALL(gballoc_malloc(IGNORED_NUM_ARG));
+    STRICT_EXPECTED_CALL(gballoc_malloc(IGNORED_NUM_ARG));
+    STRICT_EXPECTED_CALL(link_create(test_session_handle, "test_node-sender", role_sender, test_source_amqp_value, test_target_amqp_value))
+        .SetReturn(test_sender_link);
+    STRICT_EXPECTED_CALL(link_create(test_session_handle, "test_node-receiver", role_receiver, test_source_amqp_value, test_target_amqp_value))
+        .SetReturn(test_receiver_link);
+    amqp_management = amqp_management_create(test_session_handle, "test_node");
+    umock_c_reset_all_calls();
+
+    STRICT_EXPECTED_CALL(messagesender_destroy(test_message_sender));
+    STRICT_EXPECTED_CALL(messagereceiver_destroy(test_message_receiver));
+    STRICT_EXPECTED_CALL(link_destroy(test_sender_link));
+    STRICT_EXPECTED_CALL(link_destroy(test_receiver_link));
+    STRICT_EXPECTED_CALL(singlylinkedlist_destroy(test_singlylinkedlist_handle));
+    STRICT_EXPECTED_CALL(gballoc_free(IGNORED_PTR_ARG));
+
+    // act
+    amqp_management_destroy(amqp_management);
+
+    // assert
+    ASSERT_ARE_EQUAL(char_ptr, umock_c_get_expected_calls(), umock_c_get_actual_calls());
+}
+
+/* Tests_SRS_AMQP_MANAGEMENT_01_025: [ If `amqp_management` is NULL, `amqp_management_destroy` shall do nothing. ]*/
+TEST_FUNCTION(amqp_management_destroy_with_NULL_handle_does_nothing)
+{
+    // arrange
+
+    // act
+    amqp_management_destroy(NULL);
+
+    // assert
+    ASSERT_ARE_EQUAL(char_ptr, umock_c_get_expected_calls(), umock_c_get_actual_calls());
+}
+
+/* amqp_management_open_async */
+
+/* Tests_SRS_AMQP_MANAGEMENT_01_036: [ `amqp_management_open_async` shall start opening the AMQP management instance and save the callbacks so that they can be called when opening is complete. ]*/
+/* Tests_SRS_AMQP_MANAGEMENT_01_037: [ On success it shall return 0. ]*/
+/* Tests_SRS_AMQP_MANAGEMENT_01_039: [ `amqp_management_open_async` shall open the message sender by calling `messagesender_open`. ]*/
+/* Tests_SRS_AMQP_MANAGEMENT_01_040: [ `amqp_management_open_async` shall open the message receiver by calling `messagereceiver_open`. ]*/
+TEST_FUNCTION(amqp_management_open_async_opens_the_message_sender_and_message_receiver)
+{
+    // arrange
+    AMQP_MANAGEMENT_HANDLE amqp_management;
+    int result;
+    amqp_management = amqp_management_create(test_session_handle, "test_node");
+    umock_c_reset_all_calls();
+
+    STRICT_EXPECTED_CALL(messagereceiver_open(test_message_receiver, IGNORED_PTR_ARG, IGNORED_PTR_ARG));
+    STRICT_EXPECTED_CALL(messagesender_open(test_message_sender));
+
+    // act
+    result = amqp_management_open_async(amqp_management, test_on_amqp_management_open_complete, (void*)0x4242, test_on_amqp_management_error, (void*)0x4243);
+
+    // assert
+    ASSERT_ARE_EQUAL(int, 0, result);
+    ASSERT_ARE_EQUAL(char_ptr, umock_c_get_expected_calls(), umock_c_get_actual_calls());
+
+    // cleanup
+    amqp_management_destroy(amqp_management);
+}
+
+/* Tests_SRS_AMQP_MANAGEMENT_01_042: [ If `messagereceiver_open` fails, `amqp_management_open_async` shall fail and return a non-zero value. ]*/
+TEST_FUNCTION(when_opening_the_receiver_fails_amqp_management_open_async_fails)
+{
+    // arrange
+    AMQP_MANAGEMENT_HANDLE amqp_management;
+    int result;
+    amqp_management = amqp_management_create(test_session_handle, "test_node");
+    umock_c_reset_all_calls();
+
+    STRICT_EXPECTED_CALL(messagereceiver_open(test_message_receiver, IGNORED_PTR_ARG, IGNORED_PTR_ARG))
+        .SetReturn(1);
+
+    // act
+    result = amqp_management_open_async(amqp_management, test_on_amqp_management_open_complete, (void*)0x4242, test_on_amqp_management_error, (void*)0x4243);
+
+    // assert
+    ASSERT_ARE_NOT_EQUAL(int, 0, result);
+    ASSERT_ARE_EQUAL(char_ptr, umock_c_get_expected_calls(), umock_c_get_actual_calls());
+
+    // cleanup
+    amqp_management_destroy(amqp_management);
+}
+
+/* Tests_SRS_AMQP_MANAGEMENT_01_041: [ If `messagesender_open` fails, `amqp_management_open_async` shall fail and return a non-zero value. ]*/
+TEST_FUNCTION(when_opening_the_sender_fails_amqp_management_open_async_fails)
+{
+    // arrange
+    AMQP_MANAGEMENT_HANDLE amqp_management;
+    int result;
+    amqp_management = amqp_management_create(test_session_handle, "test_node");
+    umock_c_reset_all_calls();
+
+    STRICT_EXPECTED_CALL(messagereceiver_open(test_message_receiver, IGNORED_PTR_ARG, IGNORED_PTR_ARG));
+    STRICT_EXPECTED_CALL(messagesender_open(test_message_sender))
+        .SetReturn(1);
+    STRICT_EXPECTED_CALL(messagereceiver_close(test_message_receiver));
+
+    // act
+    result = amqp_management_open_async(amqp_management, test_on_amqp_management_open_complete, (void*)0x4242, test_on_amqp_management_error, (void*)0x4243);
+
+    // assert
+    ASSERT_ARE_NOT_EQUAL(int, 0, result);
+    ASSERT_ARE_EQUAL(char_ptr, umock_c_get_expected_calls(), umock_c_get_actual_calls());
+
+    // cleanup
+    amqp_management_destroy(amqp_management);
+}
+
+/* Tests_SRS_AMQP_MANAGEMENT_01_038: [ If `amqp_management`, `on_amqp_management_open_complete` or `on_amqp_management_error` is NULL, `amqp_management_open_async` shall fail and return a non-zero value. ]*/
+TEST_FUNCTION(amqp_management_open_async_with_NULL_handle_fails)
+{
+    // arrange
+    int result;
+
+    // act
+    result = amqp_management_open_async(NULL, test_on_amqp_management_open_complete, (void*)0x4242, test_on_amqp_management_error, (void*)0x4243);
+
+    // assert
+    ASSERT_ARE_NOT_EQUAL(int, 0, result);
+    ASSERT_ARE_EQUAL(char_ptr, umock_c_get_expected_calls(), umock_c_get_actual_calls());
+}
+
+/* Tests_SRS_AMQP_MANAGEMENT_01_038: [ If `amqp_management`, `on_amqp_management_open_complete` or `on_amqp_management_error` is NULL, `amqp_management_open_async` shall fail and return a non-zero value. ]*/
+TEST_FUNCTION(amqp_management_open_async_with_NULL_open_complete_callback_fails)
+{
+    // arrange
+    AMQP_MANAGEMENT_HANDLE amqp_management;
+    int result;
+    amqp_management = amqp_management_create(test_session_handle, "test_node");
+    umock_c_reset_all_calls();
+
+    // act
+    result = amqp_management_open_async(amqp_management, NULL, (void*)0x4242, test_on_amqp_management_error, (void*)0x4243);
+
+    // assert
+    ASSERT_ARE_NOT_EQUAL(int, 0, result);
+    ASSERT_ARE_EQUAL(char_ptr, umock_c_get_expected_calls(), umock_c_get_actual_calls());
+
+    // cleanup
+    amqp_management_destroy(amqp_management);
+}
+
+/* Tests_SRS_AMQP_MANAGEMENT_01_038: [ If `amqp_management`, `on_amqp_management_open_complete` or `on_amqp_management_error` is NULL, `amqp_management_open_async` shall fail and return a non-zero value. ]*/
+TEST_FUNCTION(amqp_management_open_async_with_NULL_error_complete_callback_fails)
+{
+    // arrange
+    AMQP_MANAGEMENT_HANDLE amqp_management;
+    int result;
+    amqp_management = amqp_management_create(test_session_handle, "test_node");
+    umock_c_reset_all_calls();
+
+    // act
+    result = amqp_management_open_async(amqp_management, test_on_amqp_management_open_complete, (void*)0x4242, NULL, (void*)0x4243);
+
+    // assert
+    ASSERT_ARE_NOT_EQUAL(int, 0, result);
+    ASSERT_ARE_EQUAL(char_ptr, umock_c_get_expected_calls(), umock_c_get_actual_calls());
+
+    // cleanup
+    amqp_management_destroy(amqp_management);
 }
 
 END_TEST_SUITE(amqp_management_ut)

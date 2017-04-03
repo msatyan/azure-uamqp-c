@@ -15,6 +15,11 @@
 #include "azure_uamqp_c/messaging.h"
 #include "azure_uamqp_c/amqpvalue_to_string.h"
 
+static const char sender_suffix[] = "-sender";
+static const char receiver_suffix[] = "-receiver";
+
+#define COUNT_CHARS(str) (sizeof(str) / sizeof((str)[0]) - 1)
+
 typedef enum OPERATION_STATE_TAG
 {
     OPERATION_STATE_NOT_SENT,
@@ -40,7 +45,6 @@ typedef enum AMQP_MANAGEMENT_STATE_TAG
 
 typedef struct AMQP_MANAGEMENT_INSTANCE_TAG
 {
-    SESSION_HANDLE session;
     LINK_HANDLE sender_link;
     LINK_HANDLE receiver_link;
     MESSAGE_SENDER_HANDLE message_sender;
@@ -488,13 +492,23 @@ AMQP_MANAGEMENT_HANDLE amqp_management_create(SESSION_HANDLE session, const char
         LogError("Bad arguments: session = %p, management_node = %p");
         result = NULL;
     }
+    else if (strlen(management_node) == 0)
+    {
+        /* Codes_SRS_AMQP_MANAGEMENT_01_030: [ If `management_node` is an empty string, then `amqp_management_create` shall fail and return NULL. ]*/
+        LogError("Empty string management node");
+        result = NULL;
+    }
     else
     {
         /* Codes_SRS_AMQP_MANAGEMENT_01_001: [ `amqp_management_create` shall create a new CBS instance and on success return a non-NULL handle to it. ]*/
         result = (AMQP_MANAGEMENT_INSTANCE*)malloc(sizeof(AMQP_MANAGEMENT_INSTANCE));
-        if (result != NULL)
+        if (result == NULL)
         {
-            result->session = session;
+            /* Codes_SRS_AMQP_MANAGEMENT_01_005: [ If allocating memory for the new handle fails, `amqp_management_create` shall fail and return NULL. ]*/
+            LogError("Cannot allocate memory for AMQP management handle");
+        }
+        else
+        {
             result->sender_connected = 0;
             result->receiver_connected = 0;
             result->operation_message_count = 0;
@@ -509,6 +523,7 @@ AMQP_MANAGEMENT_HANDLE amqp_management_create(SESSION_HANDLE session, const char
             result->pending_operations = singlylinkedlist_create();
             if (result->pending_operations == NULL)
             {
+                /* Codes_SRS_AMQP_MANAGEMENT_01_004: [ If `singlylinkedlist_create` fails, `amqp_management_create` shall fail and return NULL. ]*/
                 LogError("Cannot create pending operations list");
                 free(result);
                 result = NULL;
@@ -519,6 +534,8 @@ AMQP_MANAGEMENT_HANDLE amqp_management_create(SESSION_HANDLE session, const char
                 AMQP_VALUE source = messaging_create_source(management_node);
                 if (source == NULL)
                 {
+                    /* Codes_SRS_AMQP_MANAGEMENT_01_012: [ If `messaging_create_source` fails then `amqp_management_create` shall fail and return NULL. ]*/
+                    LogError("Failed creating source AMQP value");
                     singlylinkedlist_destroy(result->pending_operations);
                     free(result);
                     result = NULL;
@@ -529,58 +546,79 @@ AMQP_MANAGEMENT_HANDLE amqp_management_create(SESSION_HANDLE session, const char
                     AMQP_VALUE target = messaging_create_target(management_node);
                     if (target == NULL)
                     {
+                        /* Codes_SRS_AMQP_MANAGEMENT_01_013: [ If `messaging_create_target` fails then `amqp_management_create` shall fail and return NULL. ]*/
+                        LogError("Failed creating target AMQP value");
                         singlylinkedlist_destroy(result->pending_operations);
                         free(result);
                         result = NULL;
                     }
                     else
                     {
-                        static const char* sender_suffix = "-sender";
+                        size_t management_node_length = strlen(management_node);
 
-                        char* sender_link_name = (char*)malloc(strlen(management_node) + strlen(sender_suffix) + 1);
+                        char* sender_link_name = (char*)malloc(management_node_length + COUNT_CHARS(sender_suffix) + 1);
                         if (sender_link_name == NULL)
                         {
+                            /* Codes_SRS_AMQP_MANAGEMENT_01_033: [ If any other error occurs `amqp_management_create` shall fail and return NULL. ]*/
+                            LogError("Failed allocating memory for sender link name");
                             result = NULL;
                         }
                         else
                         {
-                            static const char* receiver_suffix = "-receiver";
+                            (void)memcpy(sender_link_name, management_node, management_node_length);
+                            (void)memcpy(sender_link_name + management_node_length, sender_suffix, COUNT_CHARS(sender_suffix) + 1);
 
-                            (void)strcpy(sender_link_name, management_node);
-                            (void)strcat(sender_link_name, sender_suffix);
-
-                            char* receiver_link_name = (char*)malloc(strlen(management_node) + strlen(receiver_suffix) + 1);
+                            char* receiver_link_name = (char*)malloc(management_node_length + COUNT_CHARS(receiver_suffix) + 1);
                             if (receiver_link_name == NULL)
                             {
+                                /* Codes_SRS_AMQP_MANAGEMENT_01_033: [ If any other error occurs `amqp_management_create` shall fail and return NULL. ]*/
+                                LogError("Failed allocating memory for receiver link name");
                                 result = NULL;
                             }
                             else
                             {
-                                (void)strcpy(receiver_link_name, management_node);
-                                (void)strcat(receiver_link_name, receiver_suffix);
+                                (void)memcpy(receiver_link_name, management_node, management_node_length);
+                                (void)memcpy(receiver_link_name + management_node_length, receiver_suffix, COUNT_CHARS(receiver_suffix) + 1);
 
                                 /* Codes_SRS_AMQP_MANAGEMENT_01_006: [ `amqp_management_create` shall create a sender link by calling `link_create`. ]*/
+                                /* Codes_SRS_AMQP_MANAGEMENT_01_007: [ The `session` argument shall be set to `session`. ]*/
+                                /* Codes_SRS_AMQP_MANAGEMENT_01_008: [ The `name` argument shall be constructed by concatenating the `management_node` value with `-sender`. ]*/
+                                /* Codes_SRS_AMQP_MANAGEMENT_01_009: [ The `role` argument shall be `role_sender`. ]*/
+                                /* Codes_SRS_AMQP_MANAGEMENT_01_019: [ The `source` argument shall be the value created by calling `messaging_create_source`. ]*/
+                                /* Codes_SRS_AMQP_MANAGEMENT_01_020: [ The `target` argument shall be the value created by calling `messaging_create_target`. ]*/
                                 result->sender_link = link_create(session, sender_link_name, role_sender, source, target);
                                 if (result->sender_link == NULL)
                                 {
+                                    /* Codes_SRS_AMQP_MANAGEMENT_01_014: [ If `link_create` fails when creating the sender link then `amqp_management_create` shall fail and return NULL. ]*/
+                                    LogError("Failed creating sender link");
                                     free(result);
                                     result = NULL;
                                 }
                                 else
                                 {
                                     /* Codes_SRS_AMQP_MANAGEMENT_01_015: [ `amqp_management_create` shall create a receiver link by calling `link_create`. ]*/
+                                    /* Codes_SRS_AMQP_MANAGEMENT_01_016: [ The `session` argument shall be set to `session`. ]*/
+                                    /* Codes_SRS_AMQP_MANAGEMENT_01_017: [ The `name` argument shall be constructed by concatenating the `management_node` value with `-receiver`. ]*/
+                                    /* Codes_SRS_AMQP_MANAGEMENT_01_018: [ The `role` argument shall be `role_receiver`. ]*/
+                                    /* Codes_SRS_AMQP_MANAGEMENT_01_019: [ The `source` argument shall be the value created by calling `messaging_create_source`. ]*/
+                                    /* Codes_SRS_AMQP_MANAGEMENT_01_020: [ The `target` argument shall be the value created by calling `messaging_create_target`. ]*/
                                     result->receiver_link = link_create(session, receiver_link_name, role_receiver, source, target);
                                     if (result->receiver_link == NULL)
                                     {
+                                        /* Codes_SRS_AMQP_MANAGEMENT_01_021: [ If `link_create` fails when creating the receiver link then `amqp_management_create` shall fail and return NULL. ]*/
+                                        LogError("Failed creating receiver link");
                                         link_destroy(result->sender_link);
                                         free(result);
                                         result = NULL;
                                     }
                                     else
                                     {
-                                        if ((link_set_max_message_size(result->sender_link, 65535) != 0) ||
-                                            (link_set_max_message_size(result->receiver_link, 65535) != 0))
+                                        /* Codes_SRS_AMQP_MANAGEMENT_01_022: [ `amqp_management_create` shall create a message sender by calling `messagesender_create` and passing to it the sender link handle. ]*/
+                                        result->message_sender = messagesender_create(result->sender_link, on_message_sender_state_changed, result);
+                                        if (result->message_sender == NULL)
                                         {
+                                            /* Codes_SRS_AMQP_MANAGEMENT_01_031: [ If `messagesender_create` fails then `amqp_management_create` shall fail and return NULL. ]*/
+                                            LogError("Failed creating message sender");
                                             link_destroy(result->sender_link);
                                             link_destroy(result->receiver_link);
                                             free(result);
@@ -588,10 +626,13 @@ AMQP_MANAGEMENT_HANDLE amqp_management_create(SESSION_HANDLE session, const char
                                         }
                                         else
                                         {
-                                            /* Codes_SRS_AMQP_MANAGEMENT_01_022: [ `amqp_management_create` shall create a message sender by calling `messagesender_create` and passing to it the sender link handle. ]*/
-                                            result->message_sender = messagesender_create(result->sender_link, on_message_sender_state_changed, result);
-                                            if (result->message_sender == NULL)
+                                            /* Codes_SRS_AMQP_MANAGEMENT_01_023: [ `amqp_management_create` shall create a message receiver by calling `messagereceiver_create` and passing to it the receiver link handle. ]*/
+                                            result->message_receiver = messagereceiver_create(result->receiver_link, on_message_receiver_state_changed, result);
+                                            if (result->message_receiver == NULL)
                                             {
+                                                /* Codes_SRS_AMQP_MANAGEMENT_01_032: [ If `messagereceiver_create` fails then `amqp_management_create` shall fail and return NULL. ]*/
+                                                LogError("Failed creating message receiver");
+                                                messagesender_destroy(result->message_sender);
                                                 link_destroy(result->sender_link);
                                                 link_destroy(result->receiver_link);
                                                 free(result);
@@ -599,19 +640,7 @@ AMQP_MANAGEMENT_HANDLE amqp_management_create(SESSION_HANDLE session, const char
                                             }
                                             else
                                             {
-                                                result->message_receiver = messagereceiver_create(result->receiver_link, on_message_receiver_state_changed, result);
-                                                if (result->message_receiver == NULL)
-                                                {
-                                                    messagesender_destroy(result->message_sender);
-                                                    link_destroy(result->sender_link);
-                                                    link_destroy(result->receiver_link);
-                                                    free(result);
-                                                    result = NULL;
-                                                }
-                                                else
-                                                {
-                                                    result->next_message_id = 0;
-                                                }
+                                                result->next_message_id = 0;
                                             }
                                         }
                                     }
@@ -637,9 +666,18 @@ AMQP_MANAGEMENT_HANDLE amqp_management_create(SESSION_HANDLE session, const char
 
 void amqp_management_destroy(AMQP_MANAGEMENT_HANDLE amqp_management)
 {
-    if (amqp_management != NULL)
+    if (amqp_management == NULL)
     {
-        (void)amqp_management_close(amqp_management);
+        /* Codes_SRS_AMQP_MANAGEMENT_01_025: [ If `amqp_management` is NULL, `amqp_management_destroy` shall do nothing. ]*/
+        LogError("NULL amqp_management");
+    }
+    else
+    {
+        /* Codes_SRS_AMQP_MANAGEMENT_01_024: [ `amqp_management_destroy` shall free all the resources allocated by `amqp_management_create`. ]*/
+        if (amqp_management->amqp_management_state != AMQP_MANAGEMENT_STATE_IDLE)
+        {
+            (void)amqp_management_close(amqp_management);
+        }
 
         if (amqp_management->operation_message_count > 0)
         {
@@ -653,10 +691,15 @@ void amqp_management_destroy(AMQP_MANAGEMENT_HANDLE amqp_management)
             free(amqp_management->operation_messages);
         }
 
+        /* Codes_SRS_AMQP_MANAGEMENT_01_028: [ `amqp_management_destroy` shall free the message sender by calling `messagesender_destroy`. ]*/
+        messagesender_destroy(amqp_management->message_sender);
+        /* Codes_SRS_AMQP_MANAGEMENT_01_029: [ `amqp_management_destroy` shall free the message receiver by calling `messagereceiver_destroy`. ]*/
+        messagereceiver_destroy(amqp_management->message_receiver);
+        /* Codes_SRS_AMQP_MANAGEMENT_01_027: [ `amqp_management_destroy` shall free the sender and receiver links by calling `link_destroy`. ]*/
         link_destroy(amqp_management->sender_link);
         link_destroy(amqp_management->receiver_link);
-        messagesender_destroy(amqp_management->message_sender);
-        messagereceiver_destroy(amqp_management->message_receiver);
+        /* Codes_SRS_AMQP_MANAGEMENT_01_026: [ `amqp_management_destroy` shall free the singly linked list by calling `singlylinkedlist_destroy`. ]*/
+        singlylinkedlist_destroy(amqp_management->pending_operations);
         free(amqp_management);
     }
 }
@@ -665,33 +708,48 @@ int amqp_management_open_async(AMQP_MANAGEMENT_HANDLE amqp_management, ON_AMQP_M
 {
     int result;
 
-    if (amqp_management == NULL)
+    if ((amqp_management == NULL) ||
+        (on_amqp_management_open_complete == NULL) ||
+        (on_amqp_management_error == NULL))
     {
+        /* Codes_SRS_AMQP_MANAGEMENT_01_038: [ If `amqp_management`, `on_amqp_management_open_complete` or `on_amqp_management_error` is NULL, `amqp_management_open_async` shall fail and return a non-zero value. ]*/
+        LogError("Bad arguments: amqp_management = %p, on_amqp_management_open_complete = %p, on_amqp_management_error = %p",
+            amqp_management,
+            on_amqp_management_open_complete,
+            on_amqp_management_error);
         result = __FAILURE__;
     }
     else
     {
+        /* Codes_SRS_AMQP_MANAGEMENT_01_036: [ `amqp_management_open_async` shall start opening the AMQP management instance and save the callbacks so that they can be called when opening is complete. ]*/
         amqp_management->on_amqp_management_open_complete = on_amqp_management_open_complete;
         amqp_management->on_amqp_management_open_complete_context = on_amqp_management_open_complete_context;
         amqp_management->on_amqp_management_error = on_amqp_management_error;
         amqp_management->on_amqp_management_error_context = on_amqp_management_error_context;
         amqp_management->amqp_management_state = AMQP_MANAGEMENT_STATE_OPENING;
 
+        /* Codes_SRS_AMQP_MANAGEMENT_01_040: [ `amqp_management_open_async` shall open the message receiver by calling `messagereceiver_open`. ]*/
         if (messagereceiver_open(amqp_management->message_receiver, on_message_received, amqp_management) != 0)
         {
+            /* Codes_SRS_AMQP_MANAGEMENT_01_042: [ If `messagereceiver_open` fails, `amqp_management_open_async` shall fail and return a non-zero value. ]*/
+            LogError("Failed opening message receiver");
             amqp_management->amqp_management_state = AMQP_MANAGEMENT_STATE_IDLE;
             result = __FAILURE__;
         }
         else
         {
+            /* Codes_SRS_AMQP_MANAGEMENT_01_039: [ `amqp_management_open_async` shall open the message sender by calling `messagesender_open`. ]*/
             if (messagesender_open(amqp_management->message_sender) != 0)
             {
+                /* Codes_SRS_AMQP_MANAGEMENT_01_041: [ If `messagesender_open` fails, `amqp_management_open_async` shall fail and return a non-zero value. ]*/
+                LogError("Failed opening message sender");
                 amqp_management->amqp_management_state = AMQP_MANAGEMENT_STATE_IDLE;
-                messagereceiver_close(amqp_management->message_receiver);
+                (void)messagereceiver_close(amqp_management->message_receiver);
                 result = __FAILURE__;
             }
             else
             {
+                /* Codes_SRS_AMQP_MANAGEMENT_01_037: [ On success it shall return 0. ]*/
                 result = 0;
             }
         }
