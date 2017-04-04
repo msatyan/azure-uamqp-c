@@ -153,6 +153,26 @@ XX**SRS_AMQP_MANAGEMENT_01_092: [** If `singlylinkedlist_add` fails then `amqp_m
 XX**SRS_AMQP_MANAGEMENT_01_106: [** The message Id set on the message properties shall start at 0. **]**
 XX**SRS_AMQP_MANAGEMENT_01_107: [** The message Id set on the message properties shall be incremented with each operation. **]**
 
+### on_message_received
+
+```c
+AMQP_VALUE on_message_received(const void* context, MESSAGE_HANDLE message)
+```
+
+When `on_message_received` is called with a NULL context, it shall do nothing.
+`on_message_received` shall obtain the application properties from the message by calling `message_get_application_properties`.
+`on_message_received` shall obtain the message properties from the message by calling `message_get_properties`.
+`on_message_received` shall obtain the correlation Id from the message properties by using `properties_get_correlation_id`.
+`on_message_received` shall check if the correlation Id matches the stored message Id of any pending operation.
+If obtaining the application properties or message properties fails, an error shall be indicated by calling `on_amqp_management_error` and passing the `on_amqp_management_error_context` to it.
+If obtaining the correlation Id fails, an error shall be indicated by calling `on_amqp_management_error` and passing the `on_amqp_management_error_context` to it.
+Iterating through the pending operations shall be done by using `singlylinkedlist_get_head_item` and `singlylinkedlist_get_next_item` until the enm of the pending operations singly linked list is reached.
+Each pending operation item value shall be obtained by calling `singlylinkedlist_item_get_value`.
+If iterating through the pending operations list fails, an error shall be indicated by calling `on_amqp_management_error` and passing the `on_amqp_management_error_context` to it.
+If no pending operation is found matching the correlation Id, the message should be ignored.
+`on_message_received` shall obtain the application properties map by calling `amqpvalue_get_inplace_described_value`.
+An AMQP value used to lookup the status code shall be created by calling `amqpvalue_create_string` with `status-code` as argument.
+
 ### amqp_management_set_trace
 
 ```c
