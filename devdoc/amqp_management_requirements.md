@@ -122,9 +122,30 @@ XX**SRS_AMQP_MANAGEMENT_01_053: [** If `messagereceiver_close` fails, `amqp_mana
 int amqp_management_execute_operation_async(AMQP_MANAGEMENT_HANDLE amqp_management, const char* operation, const char* type, const char* locales, MESSAGE_HANDLE message, ON_AMQP_MANAGEMENT_EXECUTE_OPERATION_COMPLETE on_execute_operation_complete, void* context);
 ```
 
-**SRS_AMQP_MANAGEMENT_01_055: [** `amqp_management_execute_operation_async` shall start an AMQP management operation. **]**
-**SRS_AMQP_MANAGEMENT_01_056: [** On success it shall return 0. **]**
+XX**SRS_AMQP_MANAGEMENT_01_055: [** `amqp_management_execute_operation_async` shall start an AMQP management operation. **]**
+XX**SRS_AMQP_MANAGEMENT_01_056: [** On success it shall return 0. **]**
 **SRS_AMQP_MANAGEMENT_01_057: [** If `amqp_management`, `operation`, `type`, `message` or `on_execute_operation_complete` is NULL, `amqp_management_execute_operation_async` shall fail and return a non-zero value. **]**
+**SRS_AMQP_MANAGEMENT_01_081: [** If `amqp_management_execute_operation_async` is called when not OPEN, it shall fail and return a non-zero value. **]**
+XX**SRS_AMQP_MANAGEMENT_01_082: [** `amqp_management_execute_operation_async` shall obtain the application properties from the message by calling `message_get_application_properties`. **]**
+**SRS_AMQP_MANAGEMENT_01_083: [** If no application properties were set on the message, a new application properties instance shall be created by calling `amqpvalue_create_map`; **]**
+XX**SRS_AMQP_MANAGEMENT_01_084: [** For each of the arguments `operation`, `type` and `locales` an AMQP value of type string shall be created by calling `amqpvalue_create_string` in order to be used as key in the application properties map. **]**
+XX**SRS_AMQP_MANAGEMENT_01_085: [** For each of the arguments `operation`, `type` and `locales` an AMQP value of type string containing the argument value shall be created by calling `amqpvalue_create_string` in order to be used as value in the application properties map. **]**
+**SRS_AMQP_MANAGEMENT_01_093: [** If `locales` NULL, no key/value pair shall be added for it in the application properties map. **]**
+XX**SRS_AMQP_MANAGEMENT_01_086: [** The key/value pairs for `operation`, `type` and `locales` shall be added to the application properties map by calling `amqpvalue_set_map_value`. **]**
+XX**SRS_AMQP_MANAGEMENT_01_087: [** The application properties obtained after adding the key/value pairs shall be set on the message by calling `message_set_application_properties`. **]**
+**SRS_AMQP_MANAGEMENT_01_101: [** After setting the application properties, the application properties instance shall be freed by `amqpvalue_destroy`. **]**
+**SRS_AMQP_MANAGEMENT_01_090: [** If any APIs used to create and set the application properties on the message fails, `amqp_management_execute_operation_async` shall fail and return a non-zero value. **]**
+XX**SRS_AMQP_MANAGEMENT_01_094: [** In order to set the message Id on the message, the properties shall be obtained by calling `message_get_properties`. **]**
+**SRS_AMQP_MANAGEMENT_01_099: [** If the properties cannot be obtained, a new properties instance shall be created by calling `properties_create`. **]**
+XX**SRS_AMQP_MANAGEMENT_01_095: [** A message Id with the next ulong value to be used shall be created by calling `amqpvalue_create_message_id_ulong`. **]**
+XX**SRS_AMQP_MANAGEMENT_01_096: [** The message Id value shall be set on the properties by calling `properties_set_message_id`. **]**
+XX**SRS_AMQP_MANAGEMENT_01_097: [** The properties thus modified to contain the message Id shall be set on the message by calling `message_set_properties`. **]**
+XX**SRS_AMQP_MANAGEMENT_01_100: [** After setting the properties, the properties instance shall be freed by `properties_destroy`. **]**
+**SRS_AMQP_MANAGEMENT_01_098: [** If any API fails while setting the message Id, `amqp_management_execute_operation_async` shall fail and return a non-zero value. **]**
+XX**SRS_AMQP_MANAGEMENT_01_088: [** `amqp_management_execute_operation_async` shall send the message by calling `messagesender_send`. **]**
+**SRS_AMQP_MANAGEMENT_01_089: [** If `messagesender_send` fails, `amqp_management_execute_operation_async` shall fail and return a non-zero value. **]**
+XX**SRS_AMQP_MANAGEMENT_01_091: [** Once the request message has been sent, an entry shall be stored in the pending operations list by calling `singlylinkedlist_add`. **]**
+**SRS_AMQP_MANAGEMENT_01_092: [** If `singlylinkedlist_add` fails then `amqp_management_execute_operation_async` shall fail and return a non-zero value. **]**
 
 ### amqp_management_set_trace
 
@@ -132,3 +153,54 @@ int amqp_management_execute_operation_async(AMQP_MANAGEMENT_HANDLE amqp_manageme
 void amqp_management_set_trace(AMQP_MANAGEMENT_HANDLE amqp_management, bool trace_on);
 ```
 
+### Relevant sections from the AMQP Management spec
+
+Request Messages
+
+**SRS_AMQP_MANAGEMENT_01_058: [** Request messages have the following application-properties: **]**
+
+Key Value Type Mandatory? Description
+
+**SRS_AMQP_MANAGEMENT_01_059: [** operation string Yes The management operation to be performed. **]** This is case-sensitive.
+
+**SRS_AMQP_MANAGEMENT_01_061: [** type string Yes The Manageable Entity Type of the Manageable Entity to be managed. **]** This is case-sensitive.
+
+**SRS_AMQP_MANAGEMENT_01_063: [** locales string No A list of locales that the sending peer permits for incoming informational text in response messages. **]**
+**SRS_AMQP_MANAGEMENT_01_064: [** The value MUST be of the form (presented in the augmented BNF defined in section 2 of [RFC2616]) **]**:
+**SRS_AMQP_MANAGEMENT_01_065: [** `#Language-­Tag` where Language-Tag is defined in [BCP47] **]**.
+**SRS_AMQP_MANAGEMENT_01_066: [** This list MUST be ordered in decreasing level of preference. **]** **SRS_AMQP_MANAGEMENT_01_067: [** The receiving partner will choose the first (most preferred) incoming locale from those which it supports. **]** If none of the requested locales are supported, "en-US" MUST be chosen. Note that "en-US" need not be supplied in this list as it is always the fallback. The string is not case-sensitive.
+Other application-properties MAY provide additional context. If an application-property is not recognized then it MUST be ignored.
+
+3.2 Response Messages
+
+**SRS_AMQP_MANAGEMENT_01_068: [** The correlation-id of the response message MUST be the correlation-id from the request message (if present) **]**, **SRS_AMQP_MANAGEMENT_01_069: [** else the message-id from the request message. **]**
+**SRS_AMQP_MANAGEMENT_01_070: [** Response messages have the following application-properties: **]**
+
+Key Value Type Mandatory? Description
+
+**SRS_AMQP_MANAGEMENT_01_071: [** statusCode integer Yes HTTP response code [RFC2616] **]**
+
+**SRS_AMQP_MANAGEMENT_01_072: [** statusDescription string No Description of the status. **]**
+
+**SRS_AMQP_MANAGEMENT_01_073: [** The type and contents of the body are operation-specific. **]**
+
+3.2.1 Successful Operations
+
+**SRS_AMQP_MANAGEMENT_01_074: [** Successful operations MUST result in a statusCode in the 2xx range as defined in Section 10.2 of [RFC2616]. **]**
+Further details including the form of the body are provided in the definition of each operation.
+
+3.2.2 Unsuccessful Operations
+
+**SRS_AMQP_MANAGEMENT_01_075: [** Unsuccessful operations MUST NOT result in a statusCode in the 2xx range as defined in Section 10.2 of [RFC2616]. **]**
+**SRS_AMQP_MANAGEMENT_01_076: [** The following error status code SHOULD be used for the following common failure scenarios: **]**
+
+statusCode Label Meaning
+
+**SRS_AMQP_MANAGEMENT_01_077: [** 501 Not Implemented The operation is not supported. **]**
+**SRS_AMQP_MANAGEMENT_01_078: [** 404 Not Found The Manageable Entity on which to perform the operation could not be found **]**
+
+Further details of operation-specific codes are provided in the definition of each operation.
+**SRS_AMQP_MANAGEMENT_01_079: [** The status description of a response to an unsuccessful operation SHOULD provide further information on the nature of the failure. **]**
+
+The form of the body of a response to an unsuccessful operation is unspecified and MAY be implementation-dependent.
+**SRS_AMQP_MANAGEMENT_01_080: [** Clients SHOULD ignore the body of response message if the statusCode is not in the 2xx range. **]**

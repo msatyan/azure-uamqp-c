@@ -56,6 +56,18 @@ static LINK_HANDLE test_sender_link = (LINK_HANDLE)0x4246;
 static LINK_HANDLE test_receiver_link = (LINK_HANDLE)0x4247;
 static MESSAGE_SENDER_HANDLE test_message_sender = (MESSAGE_SENDER_HANDLE)0x4248;
 static MESSAGE_RECEIVER_HANDLE test_message_receiver = (MESSAGE_RECEIVER_HANDLE)0x424A;
+static MESSAGE_HANDLE test_message = (MESSAGE_HANDLE)0x424B;
+static MESSAGE_HANDLE test_cloned_message = (MESSAGE_HANDLE)0x424C;
+static AMQP_VALUE test_application_properties = (AMQP_VALUE)0x4301;
+static AMQP_VALUE test_operation_key = (AMQP_VALUE)0x4302;
+static AMQP_VALUE test_operation_value = (AMQP_VALUE)0x4303;
+static AMQP_VALUE test_type_key = (AMQP_VALUE)0x4304;
+static AMQP_VALUE test_type_value = (AMQP_VALUE)0x4305;
+static AMQP_VALUE test_locales_key = (AMQP_VALUE)0x4306;
+static AMQP_VALUE test_locales_value = (AMQP_VALUE)0x4307;
+static AMQP_VALUE test_message_id_value = (AMQP_VALUE)0x4308;
+static AMQP_VALUE test_string_value = (AMQP_VALUE)0x4309;
+static PROPERTIES_HANDLE test_properties = (PROPERTIES_HANDLE)0x430A;
 
 MOCK_FUNCTION_WITH_CODE(, void, test_amqp_management_open_complete, void*, context, AMQP_MANAGEMENT_OPEN_RESULT, open_result)
 MOCK_FUNCTION_END()
@@ -77,6 +89,8 @@ IMPLEMENT_UMOCK_C_ENUM_TYPE(role, role_VALUES);
 MOCK_FUNCTION_WITH_CODE(, void, test_on_amqp_management_open_complete, void*, context, AMQP_MANAGEMENT_OPEN_RESULT, open_result);
 MOCK_FUNCTION_END();
 MOCK_FUNCTION_WITH_CODE(, void, test_on_amqp_management_error, void*, context);
+MOCK_FUNCTION_END();
+MOCK_FUNCTION_WITH_CODE(, void, test_on_amqp_management_execute_operation_complete, void*, context, AMQP_MANAGEMENT_EXECUTE_OPERATION_RESULT, execute_operation_result, unsigned int, status_code, const char*, status_description)
 MOCK_FUNCTION_END();
 
 static void on_umock_c_error(UMOCK_C_ERROR_CODE error_code)
@@ -117,7 +131,16 @@ TEST_SUITE_INITIALIZE(suite_init)
     REGISTER_GLOBAL_MOCK_RETURN(messagesender_create, test_message_sender);
     REGISTER_GLOBAL_MOCK_RETURN(messagereceiver_create, test_message_receiver);
     REGISTER_GLOBAL_MOCK_RETURN(link_create, test_sender_link);
-    
+    REGISTER_GLOBAL_MOCK_RETURN(amqpvalue_create_message_id_ulong, test_message_id_value);
+    REGISTER_GLOBAL_MOCK_RETURN(message_get_application_properties, 0);
+    REGISTER_GLOBAL_MOCK_RETURN(amqpvalue_create_string, test_string_value);
+    REGISTER_GLOBAL_MOCK_RETURN(amqpvalue_set_map_value, 0);
+    REGISTER_GLOBAL_MOCK_RETURN(message_set_application_properties, 0);
+    REGISTER_GLOBAL_MOCK_RETURN(message_get_properties, 0);
+    REGISTER_GLOBAL_MOCK_RETURN(message_set_properties, 0);
+    REGISTER_GLOBAL_MOCK_RETURN(properties_set_message_id, 0);
+    REGISTER_GLOBAL_MOCK_RETURN(message_clone, test_cloned_message);
+
     REGISTER_UMOCK_ALIAS_TYPE(AMQP_MANAGEMENT_HANDLE, void*);
     REGISTER_UMOCK_ALIAS_TYPE(SINGLYLINKEDLIST_HANDLE, void*);
     REGISTER_UMOCK_ALIAS_TYPE(SESSION_HANDLE, void*);
@@ -128,6 +151,9 @@ TEST_SUITE_INITIALIZE(suite_init)
     REGISTER_UMOCK_ALIAS_TYPE(MESSAGE_SENDER_HANDLE, void*);
     REGISTER_UMOCK_ALIAS_TYPE(MESSAGE_RECEIVER_HANDLE, void*);
     REGISTER_UMOCK_ALIAS_TYPE(ON_MESSAGE_RECEIVED, void*);
+    REGISTER_UMOCK_ALIAS_TYPE(MESSAGE_HANDLE, void*);
+    REGISTER_UMOCK_ALIAS_TYPE(PROPERTIES_HANDLE, void*);
+    REGISTER_UMOCK_ALIAS_TYPE(message_id_ulong, uint64_t);
 
     REGISTER_UMOCKC_PAIRED_CREATE_DESTROY_CALLS(link_create, link_destroy);
     REGISTER_UMOCKC_PAIRED_CREATE_DESTROY_CALLS(messagesender_create, messagesender_destroy);
@@ -633,6 +659,76 @@ TEST_FUNCTION(when_closing_the_receiver_fails_amqp_management_close_fails)
     amqp_management_destroy(amqp_management);
 }
 
+/* amqp_management_execute_operation_async */
 
+/* Tests_SRS_AMQP_MANAGEMENT_01_055: [ `amqp_management_execute_operation_async` shall start an AMQP management operation. ]*/
+/* Tests_SRS_AMQP_MANAGEMENT_01_056: [ On success it shall return 0. ]*/
+/* Tests_SRS_AMQP_MANAGEMENT_01_082: [ `amqp_management_execute_operation_async` shall obtain the application properties from the message by calling `message_get_application_properties`. ]*/
+/* Tests_SRS_AMQP_MANAGEMENT_01_084: [ For each of the arguments `operation`, `type` and `locales` an AMQP value of type string shall be created by calling `amqpvalue_create_string` in order to be used as key in the application properties map. ]*/
+/* Tests_SRS_AMQP_MANAGEMENT_01_085: [ For each of the arguments `operation`, `type` and `locales` an AMQP value of type string containing the argument value shall be created by calling `amqpvalue_create_string` in order to be used as value in the application properties map. ]*/
+/* Tests_SRS_AMQP_MANAGEMENT_01_086: [ The key/value pairs for `operation`, `type` and `locales` shall be added to the application properties map by calling `amqpvalue_set_map_value`. ]*/
+/* Tests_SRS_AMQP_MANAGEMENT_01_087: [ The application properties obtained after adding the key/value pairs shall be set on the message by calling `message_set_application_properties`. ]*/
+/* Tests_SRS_AMQP_MANAGEMENT_01_088: [ `amqp_management_execute_operation_async` shall send the message by calling `messagesender_send`. ]*/
+/* Tests_SRS_AMQP_MANAGEMENT_01_094: [ In order to set the message Id on the message, the properties shall be obtained by calling `message_get_properties`. ]*/
+/* Tests_SRS_AMQP_MANAGEMENT_01_095: [ A message Id with the next ulong value to be used shall be created by calling `amqpvalue_create_message_id_ulong`. ]*/
+/* Tests_SRS_AMQP_MANAGEMENT_01_096: [ The message Id value shall be set on the properties by calling `properties_set_message_id`. ]*/
+/* Tests_SRS_AMQP_MANAGEMENT_01_097: [ The properties thus modified to contain the message Id shall be set on the message by calling `message_set_properties`. ]*/
+/* Tests_SRS_AMQP_MANAGEMENT_01_100: [ After setting the properties, the properties instance shall be freed by `properties_destroy`. ]*/
+/* Tests_SRS_AMQP_MANAGEMENT_01_091: [ Once the request message has been sent, an entry shall be stored in the pending operations list by calling `singlylinkedlist_add`. ]*/
+TEST_FUNCTION(amqp_management_execute_operation_async_starts_the_operation)
+{
+    // arrange
+    AMQP_MANAGEMENT_HANDLE amqp_management;
+    int result;
+    amqp_management = amqp_management_create(test_session_handle, "test_node");
+    (void)amqp_management_open_async(amqp_management, test_on_amqp_management_open_complete, (void*)0x4242, test_on_amqp_management_error, (void*)0x4243);
+    umock_c_reset_all_calls();
+
+    STRICT_EXPECTED_CALL(message_get_application_properties(test_message, IGNORED_PTR_ARG))
+        .CopyOutArgumentBuffer_application_properties(&test_application_properties, sizeof(test_application_properties));
+    STRICT_EXPECTED_CALL(amqpvalue_create_string("operation"))
+        .SetReturn(test_operation_key);
+    STRICT_EXPECTED_CALL(amqpvalue_create_string("some_operation"))
+        .SetReturn(test_operation_value);
+    STRICT_EXPECTED_CALL(amqpvalue_set_map_value(test_application_properties, test_operation_key, test_operation_value));
+    STRICT_EXPECTED_CALL(amqpvalue_destroy(test_operation_value));
+    STRICT_EXPECTED_CALL(amqpvalue_destroy(test_operation_key));
+    STRICT_EXPECTED_CALL(amqpvalue_create_string("type"))
+        .SetReturn(test_type_key);
+    STRICT_EXPECTED_CALL(amqpvalue_create_string("some_type"))
+        .SetReturn(test_type_value);
+    STRICT_EXPECTED_CALL(amqpvalue_set_map_value(test_application_properties, test_type_key, test_type_value));
+    STRICT_EXPECTED_CALL(amqpvalue_destroy(test_type_value));
+    STRICT_EXPECTED_CALL(amqpvalue_destroy(test_type_key));
+    STRICT_EXPECTED_CALL(amqpvalue_create_string("locales"))
+        .SetReturn(test_locales_key);
+    STRICT_EXPECTED_CALL(amqpvalue_create_string("en-US"))
+        .SetReturn(test_locales_value);
+    STRICT_EXPECTED_CALL(amqpvalue_set_map_value(test_application_properties, test_locales_key, test_locales_value));
+    STRICT_EXPECTED_CALL(amqpvalue_destroy(test_locales_value));
+    STRICT_EXPECTED_CALL(amqpvalue_destroy(test_locales_key));
+    STRICT_EXPECTED_CALL(message_set_application_properties(test_message, test_application_properties));
+    STRICT_EXPECTED_CALL(message_get_properties(test_message, IGNORED_PTR_ARG))
+        .CopyOutArgumentBuffer_properties(&test_properties, sizeof(test_properties));
+    STRICT_EXPECTED_CALL(amqpvalue_create_message_id_ulong(0));
+    STRICT_EXPECTED_CALL(properties_set_message_id(test_properties, test_message_id_value));
+    STRICT_EXPECTED_CALL(amqpvalue_destroy(test_message_id_value));
+    STRICT_EXPECTED_CALL(message_set_properties(test_message, test_properties));
+    STRICT_EXPECTED_CALL(properties_destroy(test_properties));
+    STRICT_EXPECTED_CALL(gballoc_malloc(IGNORED_NUM_ARG));
+    STRICT_EXPECTED_CALL(message_clone(test_message));
+    STRICT_EXPECTED_CALL(singlylinkedlist_add(test_singlylinkedlist_handle, IGNORED_PTR_ARG));
+    STRICT_EXPECTED_CALL(amqpvalue_destroy(test_application_properties));
+
+    // act
+    result = amqp_management_execute_operation_async(amqp_management, "some_operation", "some_type", "en-US", test_message, test_on_amqp_management_execute_operation_complete, (void*)0x4244);
+
+    // assert
+    ASSERT_ARE_EQUAL(int, 0, result);
+    ASSERT_ARE_EQUAL(char_ptr, umock_c_get_expected_calls(), umock_c_get_actual_calls());
+
+    // cleanup
+    amqp_management_destroy(amqp_management);
+}
 
 END_TEST_SUITE(amqp_management_ut)

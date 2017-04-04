@@ -401,6 +401,8 @@ static int set_message_id(MESSAGE_HANDLE message, unsigned long next_message_id)
     int result = 0;
 
     PROPERTIES_HANDLE properties;
+
+    /* Codes_SRS_AMQP_MANAGEMENT_01_094: [ In order to set the message Id on the message, the properties shall be obtained by calling `message_get_properties`. ]*/
     if (message_get_properties(message, &properties) != 0)
     {
         result = __FAILURE__;
@@ -418,6 +420,7 @@ static int set_message_id(MESSAGE_HANDLE message, unsigned long next_message_id)
         }
         else
         {
+            /* Codes_SRS_AMQP_MANAGEMENT_01_095: [ A message Id with the next ulong value to be used shall be created by calling `amqpvalue_create_message_id_ulong`. ]*/
             AMQP_VALUE message_id = amqpvalue_create_message_id_ulong(next_message_id);
             if (message_id == NULL)
             {
@@ -425,6 +428,7 @@ static int set_message_id(MESSAGE_HANDLE message, unsigned long next_message_id)
             }
             else
             {
+                /* Codes_SRS_AMQP_MANAGEMENT_01_096: [ The message Id value shall be set on the properties by calling `properties_set_message_id`. ]*/
                 if (properties_set_message_id(properties, message_id) != 0)
                 {
                     result = __FAILURE__;
@@ -433,11 +437,13 @@ static int set_message_id(MESSAGE_HANDLE message, unsigned long next_message_id)
                 amqpvalue_destroy(message_id);
             }
 
+            /* Codes_SRS_AMQP_MANAGEMENT_01_097: [ The properties thus modified to contain the message Id shall be set on the message by calling `message_set_properties`. ]*/
             if (message_set_properties(message, properties) != 0)
             {
                 result = __FAILURE__;
             }
 
+            /* Codes_SRS_AMQP_MANAGEMENT_01_100: [ After setting the properties, the properties instance shall be freed by `properties_destroy`. ]*/
             properties_destroy(properties);
         }
     }
@@ -449,13 +455,15 @@ static int add_string_key_value_pair_to_map(AMQP_VALUE map, const char* key, con
 {
     int result;
 
+    /* Codes_SRS_AMQP_MANAGEMENT_01_084: [ For each of the arguments `operation`, `type` and `locales` an AMQP value of type string shall be created by calling `amqpvalue_create_string` in order to be used as key in the application properties map. ]*/
     AMQP_VALUE key_value = amqpvalue_create_string(key);
-    if (key == NULL)
+    if (key_value == NULL)
     {
         result = __FAILURE__;
     }
     else
     {
+        /* Codes_SRS_AMQP_MANAGEMENT_01_085: [ For each of the arguments `operation`, `type` and `locales` an AMQP value of type string containing the argument value shall be created by calling `amqpvalue_create_string` in order to be used as value in the application properties map. ]*/
         AMQP_VALUE value_value = amqpvalue_create_string(value);
         if (value_value == NULL)
         {
@@ -463,6 +471,7 @@ static int add_string_key_value_pair_to_map(AMQP_VALUE map, const char* key, con
         }
         else
         {
+            /* Codes_SRS_AMQP_MANAGEMENT_01_086: [ The key/value pairs for `operation`, `type` and `locales` shall be added to the application properties map by calling `amqpvalue_set_map_value`. ]*/
             if (amqpvalue_set_map_value(map, key_value, value_value) != 0)
             {
                 result = __FAILURE__;
@@ -472,10 +481,10 @@ static int add_string_key_value_pair_to_map(AMQP_VALUE map, const char* key, con
                 result = 0;
             }
 
-            amqpvalue_destroy(key_value);
+            amqpvalue_destroy(value_value);
         }
 
-        amqpvalue_destroy(value_value);
+        amqpvalue_destroy(key_value);
     }
 
     return result;
@@ -816,12 +825,17 @@ int amqp_management_execute_operation_async(AMQP_MANAGEMENT_HANDLE amqp_manageme
     else
     {
         AMQP_VALUE application_properties;
+
+        /* Codes_SRS_AMQP_MANAGEMENT_01_055: [ `amqp_management_execute_operation_async` shall start an AMQP management operation. ]*/
+        /* Codes_SRS_AMQP_MANAGEMENT_01_082: [ `amqp_management_execute_operation_async` shall obtain the application properties from the message by calling `message_get_application_properties`. ]*/
         if (message_get_application_properties(message, &application_properties) != 0)
         {
             result = __FAILURE__;
         }
         else
         {
+            /* Codes_SRS_AMQP_MANAGEMENT_01_084: [ For each of the arguments `operation`, `type` and `locales` an AMQP value of type string shall be created by calling `amqpvalue_create_string` in order to be used as key in the application properties map. ]*/
+            /* Codes_SRS_AMQP_MANAGEMENT_01_085: [ For each of the arguments `operation`, `type` and `locales` an AMQP value of type string containing the argument value shall be created by calling `amqpvalue_create_string` in order to be used as value in the application properties map. ]*/
             if ((add_string_key_value_pair_to_map(application_properties, "operation", operation) != 0) ||
                 (add_string_key_value_pair_to_map(application_properties, "type", type) != 0) ||
                 ((locales != NULL) && (add_string_key_value_pair_to_map(application_properties, "locales", locales) != 0)))
@@ -830,6 +844,7 @@ int amqp_management_execute_operation_async(AMQP_MANAGEMENT_HANDLE amqp_manageme
             }
             else
             {
+                /* Codes_SRS_AMQP_MANAGEMENT_01_087: [ The application properties obtained after adding the key/value pairs shall be set on the message by calling `message_set_application_properties`. ]*/
                 if ((message_set_application_properties(message, application_properties) != 0) ||
                     (set_message_id(message, amqp_management->next_message_id) != 0))
                 {
@@ -837,6 +852,7 @@ int amqp_management_execute_operation_async(AMQP_MANAGEMENT_HANDLE amqp_manageme
                 }
                 else
                 {
+                    /* Codes_SRS_AMQP_MANAGEMENT_01_091: [ Once the request message has been sent, an entry shall be stored in the pending operations list by calling `singlylinkedlist_add`. ]*/
                     OPERATION_MESSAGE_INSTANCE* pending_operation_message = malloc(sizeof(OPERATION_MESSAGE_INSTANCE));
                     if (pending_operation_message == NULL)
                     {
@@ -852,8 +868,8 @@ int amqp_management_execute_operation_async(AMQP_MANAGEMENT_HANDLE amqp_manageme
 
                         amqp_management->next_message_id++;
 
-                        OPERATION_MESSAGE_INSTANCE** new_operation_messages = realloc(amqp_management->operation_messages, (amqp_management->operation_message_count + 1) * sizeof(OPERATION_MESSAGE_INSTANCE*));
-                        if (new_operation_messages == NULL)
+                        /* Codes_SRS_AMQP_MANAGEMENT_01_091: [ Once the request message has been sent, an entry shall be stored in the pending operations list by calling `singlylinkedlist_add`. ]*/
+                        if (singlylinkedlist_add(amqp_management->pending_operations, pending_operation_message) != 0)
                         {
                             message_destroy(message);
                             free(pending_operation_message);
@@ -861,10 +877,7 @@ int amqp_management_execute_operation_async(AMQP_MANAGEMENT_HANDLE amqp_manageme
                         }
                         else
                         {
-                            amqp_management->operation_messages = new_operation_messages;
-                            amqp_management->operation_messages[amqp_management->operation_message_count] = pending_operation_message;
-                            amqp_management->operation_message_count++;
-
+                            /* Codes_SRS_AMQP_MANAGEMENT_01_088: [ `amqp_management_execute_operation_async` shall send the message by calling `messagesender_send`. ]*/
                             if (send_operation_messages(amqp_management) != 0)
                             {
                                 if (on_execute_operation_complete != NULL)
@@ -876,6 +889,7 @@ int amqp_management_execute_operation_async(AMQP_MANAGEMENT_HANDLE amqp_manageme
                             }
                             else
                             {
+                                /* Codes_SRS_AMQP_MANAGEMENT_01_056: [ On success it shall return 0. ]*/
                                 result = 0;
                             }
                         }
