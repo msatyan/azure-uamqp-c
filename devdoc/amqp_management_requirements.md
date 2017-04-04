@@ -122,9 +122,9 @@ XX**SRS_AMQP_MANAGEMENT_01_053: [** If `messagereceiver_close` fails, `amqp_mana
 int amqp_management_execute_operation_async(AMQP_MANAGEMENT_HANDLE amqp_management, const char* operation, const char* type, const char* locales, MESSAGE_HANDLE message, ON_AMQP_MANAGEMENT_EXECUTE_OPERATION_COMPLETE on_execute_operation_complete, void* context);
 ```
 
-`amqp_management_execute_operation_async` shall start an AMQP management operation.
-On success it shall return 0.
-If `amqp_management`, `operation`, `type`, `message` or `on_execute_operation_complete` is NULL, `amqp_management_execute_operation_async` shall fail and reutn a non-zero value.
+**SRS_AMQP_MANAGEMENT_01_055: [** `amqp_management_execute_operation_async` shall start an AMQP management operation. **]**
+**SRS_AMQP_MANAGEMENT_01_056: [** On success it shall return 0. **]**
+**SRS_AMQP_MANAGEMENT_01_057: [** If `amqp_management`, `operation`, `type`, `message` or `on_execute_operation_complete` is NULL, `amqp_management_execute_operation_async` shall fail and return a non-zero value. **]**
 
 ### amqp_management_set_trace
 

@@ -633,4 +633,6 @@ TEST_FUNCTION(when_closing_the_receiver_fails_amqp_management_close_fails)
     amqp_management_destroy(amqp_management);
 }
 
+
+
 END_TEST_SUITE(amqp_management_ut)
