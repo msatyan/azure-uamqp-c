@@ -51,7 +51,7 @@ TEST_SUITE_INITIALIZE(suite_init)
     result = platform_init();
     ASSERT_ARE_EQUAL_WITH_MSG(int, 0, result, "platform_init failed");
 
-    srand((unsigned int)time(NULL));
+    srand((unsigned int)clock());
 }
 
 TEST_SUITE_CLEANUP(suite_cleanup)
