@@ -159,19 +159,33 @@ XX**SRS_AMQP_MANAGEMENT_01_107: [** The message Id set on the message properties
 AMQP_VALUE on_message_received(const void* context, MESSAGE_HANDLE message)
 ```
 
-When `on_message_received` is called with a NULL context, it shall do nothing.
-`on_message_received` shall obtain the application properties from the message by calling `message_get_application_properties`.
-`on_message_received` shall obtain the message properties from the message by calling `message_get_properties`.
-`on_message_received` shall obtain the correlation Id from the message properties by using `properties_get_correlation_id`.
-`on_message_received` shall check if the correlation Id matches the stored message Id of any pending operation.
-If obtaining the application properties or message properties fails, an error shall be indicated by calling `on_amqp_management_error` and passing the `on_amqp_management_error_context` to it.
-If obtaining the correlation Id fails, an error shall be indicated by calling `on_amqp_management_error` and passing the `on_amqp_management_error_context` to it.
-Iterating through the pending operations shall be done by using `singlylinkedlist_get_head_item` and `singlylinkedlist_get_next_item` until the enm of the pending operations singly linked list is reached.
-Each pending operation item value shall be obtained by calling `singlylinkedlist_item_get_value`.
-If iterating through the pending operations list fails, an error shall be indicated by calling `on_amqp_management_error` and passing the `on_amqp_management_error_context` to it.
-If no pending operation is found matching the correlation Id, the message should be ignored.
-`on_message_received` shall obtain the application properties map by calling `amqpvalue_get_inplace_described_value`.
-An AMQP value used to lookup the status code shall be created by calling `amqpvalue_create_string` with `status-code` as argument.
+XX**SRS_AMQP_MANAGEMENT_01_108: [** When `on_message_received` is called with a NULL context, it shall do nothing and return NULL. **]**
+XX**SRS_AMQP_MANAGEMENT_01_109: [** `on_message_received` shall obtain the application properties from the message by calling `message_get_application_properties`. **]**
+XX**SRS_AMQP_MANAGEMENT_01_110: [** `on_message_received` shall obtain the message properties from the message by calling `message_get_properties`. **]**
+XX**SRS_AMQP_MANAGEMENT_01_111: [** `on_message_received` shall obtain the correlation Id from the message properties by using `properties_get_correlation_id`. **]**
+**SRS_AMQP_MANAGEMENT_01_112: [** `on_message_received` shall check if the correlation Id matches the stored message Id of any pending operation. **]**
+**SRS_AMQP_MANAGEMENT_01_113: [** If obtaining the application properties or message properties fails, an error shall be indicated by calling `on_amqp_management_error` and passing the `on_amqp_management_error_context` to it. **]**
+**SRS_AMQP_MANAGEMENT_01_114: [** If obtaining the correlation Id fails, an error shall be indicated by calling `on_amqp_management_error` and passing the `on_amqp_management_error_context` to it. **]**
+XX**SRS_AMQP_MANAGEMENT_01_115: [** Iterating through the pending operations shall be done by using `singlylinkedlist_get_head_item` and `singlylinkedlist_get_next_item` until the enm of the pending operations singly linked list is reached. **]**
+XX**SRS_AMQP_MANAGEMENT_01_116: [** Each pending operation item value shall be obtained by calling `singlylinkedlist_item_get_value`. **]**
+**SRS_AMQP_MANAGEMENT_01_117: [** If iterating through the pending operations list fails, an error shall be indicated by calling `on_amqp_management_error` and passing the `on_amqp_management_error_context` to it. **]**
+**SRS_AMQP_MANAGEMENT_01_118: [** If no pending operation is found matching the correlation Id, an error shall be indicated by calling `on_amqp_management_error` and passing the `on_amqp_management_error_context` to it. **]**
+XX**SRS_AMQP_MANAGEMENT_01_119: [** `on_message_received` shall obtain the application properties map by calling `amqpvalue_get_inplace_described_value`. **]**
+XX**SRS_AMQP_MANAGEMENT_01_120: [** An AMQP value used to lookup the status code shall be created by calling `amqpvalue_create_string` with `status-code` as argument. **]**
+XX**SRS_AMQP_MANAGEMENT_01_121: [** The status code shall be looked up in the application properties by using `amqpvalue_get_map_value`. **]**
+XX**SRS_AMQP_MANAGEMENT_01_133: [** The status code value shall be extracted from the value found in the map by using `amqpvalue_get_int`. **]**
+**SRS_AMQP_MANAGEMENT_01_122: [** If status code is not found an error shall be indicated to the consumer by calling the `on_amqp_management_error` and passing the `on_amqp_management_error_context` to it. **]**
+XX**SRS_AMQP_MANAGEMENT_01_123: [** An AMQP value used to lookup the status description shall be created by calling `amqpvalue_create_string` with `status-description` as argument. **]**
+XX**SRS_AMQP_MANAGEMENT_01_124: [** The status description shall be looked up in the application properties by using `amqpvalue_get_map_value`. **]**
+**SRS_AMQP_MANAGEMENT_01_125: [** If status description is not found, NULL shall be passed to the user callback as `status_description` argument. **]**
+XX**SRS_AMQP_MANAGEMENT_01_134: [** The status description value shall be extracted from the value found in the map by using `amqpvalue_get_string`. **]**
+**SRS_AMQP_MANAGEMENT_01_132: [** If any functions manipulating AMQP values, application properties, etc., fail, an error shall be indicated to the consumer by calling the `on_amqp_management_error` and passing the `on_amqp_management_error_context` to it. **]**
+**SRS_AMQP_MANAGEMENT_01_126: [** If a corresponding correlation Id is found in the pending operations list, the callback associated with the pending operation shall be called. **]**
+XX**SRS_AMQP_MANAGEMENT_01_127: [** If the operation succeeded the result callback argument shall be `AMQP_MANAGEMENT_EXECUTE_OPERATION_OK`. **]**
+**SRS_AMQP_MANAGEMENT_01_128: [** If the status indicates that the operation failed, the result callback argument shall be `AMQP_MANAGEMENT_EXECUTE_OPERATION_FAILED_BAD_STATUS`. **]**
+XX**SRS_AMQP_MANAGEMENT_01_129: [** After calling the callback, the pending operation shall be removed from the pending operations list by calling `singlylinkedlist_remove`. **]**
+**SRS_AMQP_MANAGEMENT_01_130: [** The `on_message_received` shall call `messaging_delivery_accepted` and return the created delivery AMQP value. **]**
+XX**SRS_AMQP_MANAGEMENT_01_131: [** All temporary values like AMQP values used as keys shall be freed before exiting the callback. **]**
 
 ### amqp_management_set_trace
 

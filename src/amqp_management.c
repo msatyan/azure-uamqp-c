@@ -20,16 +20,9 @@ static const char receiver_suffix[] = "-receiver";
 
 #define COUNT_CHARS(str) (sizeof(str) / sizeof((str)[0]) - 1)
 
-typedef enum OPERATION_STATE_TAG
-{
-    OPERATION_STATE_NOT_SENT,
-    OPERATION_STATE_AWAIT_REPLY
-} OPERATION_STATE;
-
 typedef struct OPERATION_MESSAGE_INSTANCE_TAG
 {
     MESSAGE_HANDLE message;
-    OPERATION_STATE operation_state;
     ON_AMQP_MANAGEMENT_EXECUTE_OPERATION_COMPLETE on_execute_operation_complete;
     void* callback_context;
     uint64_t message_id;
@@ -91,185 +84,178 @@ static void remove_operation_message_by_index(AMQP_MANAGEMENT_INSTANCE* amqp_man
 
 static AMQP_VALUE on_message_received(const void* context, MESSAGE_HANDLE message)
 {
-    AMQP_MANAGEMENT_INSTANCE* amqp_management_instance = (AMQP_MANAGEMENT_INSTANCE*)context;
+    AMQP_VALUE result;
 
-    AMQP_VALUE application_properties;
-    if (message_get_application_properties(message, &application_properties) != 0)
+    if (context == NULL)
     {
-        /* error */
+        /* Codes_SRS_AMQP_MANAGEMENT_01_108: [ When `on_message_received` is called with a NULL context, it shall do nothing. ]*/
+        LogError("NULL context in on_message_received");
+        result = NULL;
     }
     else
     {
-        PROPERTIES_HANDLE response_properties;
+        AMQP_MANAGEMENT_HANDLE amqp_management = (AMQP_MANAGEMENT_HANDLE)context;
+        AMQP_VALUE application_properties;
 
-        if (message_get_properties(message, &response_properties) != 0)
+        /* Codes_SRS_AMQP_MANAGEMENT_01_109: [ `on_message_received` shall obtain the application properties from the message by calling `message_get_application_properties`. ]*/
+        if (message_get_application_properties(message, &application_properties) != 0)
         {
             /* error */
         }
         else
         {
-            AMQP_VALUE key;
-            AMQP_VALUE value;
-            AMQP_VALUE desc_key;
-            AMQP_VALUE desc_value;
-            AMQP_VALUE map;
-            AMQP_VALUE correlation_id_value;
+            PROPERTIES_HANDLE response_properties;
 
-            if (properties_get_correlation_id(response_properties, &correlation_id_value) != 0)
+            /* Codes_SRS_AMQP_MANAGEMENT_01_110: [ `on_message_received` shall obtain the message properties from the message by calling `message_get_properties`. ]*/
+            if (message_get_properties(message, &response_properties) != 0)
             {
                 /* error */
             }
             else
             {
-                map = amqpvalue_get_inplace_described_value(application_properties);
-                if (map == NULL)
+                AMQP_VALUE key;
+                AMQP_VALUE value;
+                AMQP_VALUE desc_key;
+                AMQP_VALUE desc_value;
+                AMQP_VALUE map;
+                AMQP_VALUE correlation_id_value;
+                uint64_t correlation_id;
+
+                /* Codes_SRS_AMQP_MANAGEMENT_01_111: [ `on_message_received` shall obtain the correlation Id from the message properties by using `properties_get_correlation_id`. ]*/
+                if (properties_get_correlation_id(response_properties, &correlation_id_value) != 0)
                 {
                     /* error */
                 }
                 else
                 {
-                    key = amqpvalue_create_string("status-code");
-                    if (key == NULL)
+                    if (amqpvalue_get_ulong(correlation_id_value, &correlation_id) != 0)
                     {
                         /* error */
                     }
                     else
                     {
-                        value = amqpvalue_get_map_value(map, key);
-                        if (value == NULL)
+                        /* Codes_SRS_AMQP_MANAGEMENT_01_119: [ `on_message_received` shall obtain the application properties map by calling `amqpvalue_get_inplace_described_value`. ]*/
+                        map = amqpvalue_get_inplace_described_value(application_properties);
+                        if (map == NULL)
                         {
                             /* error */
                         }
                         else
                         {
-                            int32_t status_code;
-                            if (amqpvalue_get_int(value, &status_code) != 0)
+                            /* Codes_SRS_AMQP_MANAGEMENT_01_120: [ An AMQP value used to lookup the status code shall be created by calling `amqpvalue_create_string` with `status-code` as argument. ]*/
+                            key = amqpvalue_create_string("status-code");
+                            if (key == NULL)
                             {
                                 /* error */
                             }
                             else
                             {
-                                desc_key = amqpvalue_create_string("status-description");
-                                if (desc_key == NULL)
+                                /* Codes_SRS_AMQP_MANAGEMENT_01_121: [ The status code shall be looked up in the application properties by using `amqpvalue_get_map_value`. ]*/
+                                value = amqpvalue_get_map_value(map, key);
+                                if (value == NULL)
                                 {
                                     /* error */
                                 }
                                 else
                                 {
-                                    const char* status_description = NULL;
-
-                                    desc_value = amqpvalue_get_map_value(map, desc_key);
-                                    if (desc_value != NULL)
+                                    int32_t status_code;
+                                    /* Codes_SRS_AMQP_MANAGEMENT_01_133: [ The status code value shall be extracted from the value found in the map by using `amqpvalue_get_int`. ]*/
+                                    if (amqpvalue_get_int(value, &status_code) != 0)
                                     {
-                                        amqpvalue_get_string(desc_value, &status_description);
+                                        /* error */
                                     }
-
-                                    size_t i = 0;
-                                    while (i < amqp_management_instance->operation_message_count)
+                                    else
                                     {
-                                        if (amqp_management_instance->operation_messages[i]->operation_state == OPERATION_STATE_AWAIT_REPLY)
+                                        /* Codes_SRS_AMQP_MANAGEMENT_01_123: [ An AMQP value used to lookup the status description shall be created by calling `amqpvalue_create_string` with `status-description` as argument. ]*/
+                                        desc_key = amqpvalue_create_string("status-description");
+                                        if (desc_key == NULL)
                                         {
-                                            AMQP_VALUE expected_message_id = amqpvalue_create_ulong(amqp_management_instance->operation_messages[i]->message_id);
-                                            AMQP_MANAGEMENT_EXECUTE_OPERATION_RESULT execute_operation_result;
-
-                                            if (expected_message_id == NULL)
-                                            {
-                                                break;
-                                            }
-                                            else
-                                            {
-                                                if (amqpvalue_are_equal(correlation_id_value, expected_message_id))
-                                                {
-                                                    /* 202 is not mentioned in the draft in any way, this is a workaround for an EH bug for now */
-                                                    if ((status_code != 200) && (status_code != 202))
-                                                    {
-                                                        execute_operation_result = AMQP_MANAGEMENT_EXECUTE_OPERATION_FAILED_BAD_STATUS;
-                                                    }
-                                                    else
-                                                    {
-                                                        execute_operation_result = AMQP_MANAGEMENT_EXECUTE_OPERATION_OK;
-                                                    }
-
-                                                    amqp_management_instance->operation_messages[i]->on_execute_operation_complete(amqp_management_instance->operation_messages[i]->callback_context, execute_operation_result, status_code, status_description);
-
-                                                    remove_operation_message_by_index(amqp_management_instance, i);
-
-                                                    amqpvalue_destroy(expected_message_id);
-
-                                                    break;
-                                                }
-                                                else
-                                                {
-                                                    i++;
-                                                }
-
-                                                amqpvalue_destroy(expected_message_id);
-                                            }
+                                            /* error */
                                         }
                                         else
                                         {
-                                            i++;
+                                            const char* status_description = NULL;
+                                            LIST_ITEM_HANDLE list_item_handle;
+
+                                            /* Codes_SRS_AMQP_MANAGEMENT_01_124: [ The status description shall be looked up in the application properties by using `amqpvalue_get_map_value`. ]*/
+                                            desc_value = amqpvalue_get_map_value(map, desc_key);
+                                            if (desc_value != NULL)
+                                            {
+                                                /* Codes_SRS_AMQP_MANAGEMENT_01_134: [ The status description value shall be extracted from the value found in the map by using `amqpvalue_get_string`. ]*/
+                                                amqpvalue_get_string(desc_value, &status_description);
+                                            }
+
+                                            list_item_handle = singlylinkedlist_get_head_item(amqp_management->pending_operations);
+                                            while (list_item_handle != NULL)
+                                            {
+                                                /* Codes_SRS_AMQP_MANAGEMENT_01_116: [ Each pending operation item value shall be obtained by calling `singlylinkedlist_item_get_value`. ]*/
+                                                OPERATION_MESSAGE_INSTANCE* operation_message = (OPERATION_MESSAGE_INSTANCE*)singlylinkedlist_item_get_value(list_item_handle);
+                                                if (operation_message == NULL)
+                                                {
+                                                    /* error */
+                                                }
+                                                else
+                                                {
+                                                    AMQP_MANAGEMENT_EXECUTE_OPERATION_RESULT execute_operation_result;
+
+                                                    if (correlation_id == operation_message->message_id)
+                                                    {
+                                                        /* 202 is not mentioned in the draft in any way, this is a workaround for an EH bug for now */
+                                                        if ((status_code != 200) && (status_code != 202))
+                                                        {
+                                                            execute_operation_result = AMQP_MANAGEMENT_EXECUTE_OPERATION_FAILED_BAD_STATUS;
+                                                        }
+                                                        else
+                                                        {
+                                                            /* Codes_SRS_AMQP_MANAGEMENT_01_127: [ If the operation succeeded the result callback argument shall be `AMQP_MANAGEMENT_EXECUTE_OPERATION_OK`. ]*/
+                                                            execute_operation_result = AMQP_MANAGEMENT_EXECUTE_OPERATION_OK;
+                                                        }
+
+                                                        /* Codes_SRS_AMQP_MANAGEMENT_01_126: [ If a corresponding correlation Id is found in the pending operations list, the callback associated with the pending operation shall be called. ]*/
+                                                        operation_message->on_execute_operation_complete(operation_message->callback_context, execute_operation_result, status_code, status_description);
+                                                        /* Codes_SRS_AMQP_MANAGEMENT_01_129: [ After calling the callback, the pending operation shall be removed from the pending operations list by calling `singlylinkedlist_remove`. ]*/
+                                                        (void)singlylinkedlist_remove(amqp_management->pending_operations, list_item_handle);
+
+                                                        break;
+                                                    }
+                                                }
+
+                                                /* Codes_SRS_AMQP_MANAGEMENT_01_115: [ Iterating through the pending operations shall be done by using `singlylinkedlist_get_head_item` and `singlylinkedlist_get_next_item` until the enm of the pending operations singly linked list is reached. ]*/
+                                                list_item_handle = singlylinkedlist_get_next_item(list_item_handle);
+                                            }
+
+                                            if (desc_value != NULL)
+                                            {
+                                                /* Codes_SRS_AMQP_MANAGEMENT_01_131: [ All temporary values like AMQP values used as keys shall be freed before exiting the callback. ]*/
+                                                amqpvalue_destroy(desc_value);
+                                            }
+
+                                            /* Codes_SRS_AMQP_MANAGEMENT_01_131: [ All temporary values like AMQP values used as keys shall be freed before exiting the callback. ]*/
+                                            amqpvalue_destroy(desc_key);
                                         }
                                     }
 
-                                    if (desc_value != NULL)
-                                    {
-                                        amqpvalue_destroy(desc_value);
-                                    }
-                                    amqpvalue_destroy(desc_key);
+                                    /* Codes_SRS_AMQP_MANAGEMENT_01_131: [ All temporary values like AMQP values used as keys shall be freed before exiting the callback. ]*/
+                                    amqpvalue_destroy(value);
                                 }
+
+                                /* Codes_SRS_AMQP_MANAGEMENT_01_131: [ All temporary values like AMQP values used as keys shall be freed before exiting the callback. ]*/
+                                amqpvalue_destroy(key);
                             }
-                            amqpvalue_destroy(value);
                         }
-                        amqpvalue_destroy(key);
                     }
                 }
+
+                /* Codes_SRS_AMQP_MANAGEMENT_01_131: [ All temporary values like AMQP values used as keys shall be freed before exiting the callback. ]*/
+                properties_destroy(response_properties);
             }
 
-            properties_destroy(response_properties);
+            /* Codes_SRS_AMQP_MANAGEMENT_01_131: [ All temporary values like AMQP values used as keys shall be freed before exiting the callback. ]*/
+            application_properties_destroy(application_properties);
         }
 
-        application_properties_destroy(application_properties);
-    }
-
-    return messaging_delivery_accepted();
-}
-
-static int send_operation_messages(AMQP_MANAGEMENT_INSTANCE* amqp_management_instance)
-{
-    int result;
-
-    if ((amqp_management_instance->sender_connected != 0) &&
-        (amqp_management_instance->receiver_connected != 0))
-    {
-        size_t i;
-
-        for (i = 0; i < amqp_management_instance->operation_message_count; i++)
-        {
-            if (amqp_management_instance->operation_messages[i]->operation_state == OPERATION_STATE_NOT_SENT)
-            {
-                if (messagesender_send(amqp_management_instance->message_sender, amqp_management_instance->operation_messages[i]->message, NULL, NULL) != 0)
-                {
-                    /* error */
-                    break;
-                }
-
-                amqp_management_instance->operation_messages[i]->operation_state = OPERATION_STATE_AWAIT_REPLY;
-            }
-        }
-
-        if (i < amqp_management_instance->operation_message_count)
-        {
-            result = __FAILURE__;
-        }
-        else
-        {
-            result = 0;
-        }
-    }
-    else
-    {
-        result = 0;
+        /* Codes_SRS_AMQP_MANAGEMENT_01_130: [ The `on_message_received` shall call `messaging_delivery_accepted` and return the created delivery AMQP value. ]*/
+        result = messaging_delivery_accepted();
     }
 
     return result;
@@ -296,7 +282,6 @@ static void on_message_sender_state_changed(void* context, MESSAGE_SENDER_STATE 
             amqp_management_instance->sender_connected = -1;
             if (amqp_management_instance->receiver_connected != 0)
             {
-                (void)send_operation_messages(amqp_management_instance);
                 amqp_management_instance->amqp_management_state = AMQP_MANAGEMENT_STATE_OPEN;
                 amqp_management_instance->on_amqp_management_open_complete(amqp_management_instance->on_amqp_management_open_complete_context, AMQP_MANAGEMENT_OPEN_OK);
             }
@@ -357,7 +342,6 @@ static void on_message_receiver_state_changed(const void* context, MESSAGE_RECEI
 
             if (amqp_management_instance->sender_connected != 0)
             {
-                (void)send_operation_messages(amqp_management_instance);
                 amqp_management_instance->amqp_management_state = AMQP_MANAGEMENT_STATE_OPEN;
                 amqp_management_instance->on_amqp_management_open_complete(amqp_management_instance->on_amqp_management_open_complete_context, AMQP_MANAGEMENT_OPEN_OK);
             }
@@ -947,7 +931,6 @@ int amqp_management_execute_operation_async(AMQP_MANAGEMENT_HANDLE amqp_manageme
                                 pending_operation_message->message = cloned_message;
                                 pending_operation_message->callback_context = on_execute_operation_complete_context;
                                 pending_operation_message->on_execute_operation_complete = on_execute_operation_complete;
-                                pending_operation_message->operation_state = OPERATION_STATE_NOT_SENT;
                                 pending_operation_message->message_id = amqp_management->next_message_id;
 
                                 /* Codes_SRS_AMQP_MANAGEMENT_01_091: [ Once the request message has been sent, an entry shall be stored in the pending operations list by calling `singlylinkedlist_add`. ]*/
@@ -963,7 +946,7 @@ int amqp_management_execute_operation_async(AMQP_MANAGEMENT_HANDLE amqp_manageme
                                 else
                                 {
                                     /* Codes_SRS_AMQP_MANAGEMENT_01_088: [ `amqp_management_execute_operation_async` shall send the message by calling `messagesender_send`. ]*/
-                                    if (send_operation_messages(amqp_management) != 0)
+                                    if (messagesender_send(amqp_management->message_sender, pending_operation_message->message, NULL, NULL) != 0)
                                     {
                                         /* Codes_SRS_AMQP_MANAGEMENT_01_089: [ If `messagesender_send` fails, `amqp_management_execute_operation_async` shall fail and return a non-zero value. ]*/
                                         LogError("Could not send request message");
